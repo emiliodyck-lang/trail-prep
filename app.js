@@ -230,7 +230,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button></div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 11</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => emojiPicker($('emo'), name.value, pick.emoji, e => { pick.emoji = e; drawEmoji(); });
@@ -417,5 +417,16 @@ $('file').onchange = async e => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 window.addEventListener('resize', () => goToPage(currentPage()));
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Always check the server for a new sw.js, and reload once when a new version takes over,
+// so a deploy shows up on the next open instead of waiting on stale caches.
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController && !reloaded) { reloaded = true; location.reload(); }
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+}
 render();
