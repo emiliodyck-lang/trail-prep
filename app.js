@@ -83,9 +83,9 @@ function render() {
     if (done) doneCount++;
     const li = el('li', done ? 'done' : '');
 
-    const check = el('button', 'check' + (isAmount(h) ? ' plus' : ''), isAmount(h) ? '+' + fmt(h.step) : '✓');
-    check.setAttribute('aria-label', isAmount(h) ? `Add ${fmt(h.step)} ${h.unit} to ${h.name}` : `${done ? 'Unmark' : 'Mark'} ${h.name}`);
-    check.onclick = () => isAmount(h) ? addAmount(h, today, h.step) : toggle(h, today);
+    const check = el('button', 'check' + (isAmount(h) ? ' plus' : ''), isAmount(h) ? '+' : '✓');
+    check.setAttribute('aria-label', isAmount(h) ? `Log ${h.unit} for ${h.name}` : `${done ? 'Unmark' : 'Mark'} ${h.name}`);
+    check.onclick = () => isAmount(h) ? openLogSheet(h) : toggle(h, today);
 
     const body = el('div', 'body');
     body.onclick = () => isAmount(h) ? openLogSheet(h) : toggle(h, today);
@@ -201,34 +201,33 @@ function openAddSheet(name) {
   draw();
 }
 
-// Tapping an amount habit: quick buttons plus a custom amount for today.
+// Tapping an amount habit asks "how much?" with the keyboard already up, plus quick buttons.
 function openLogSheet(h) {
   const today = ymd(daysAgo(0));
-  const draw = () => {
-    const amt = amountOn(h, today);
-    openSheet(`
-      <h2>${esc(h.name)}</h2>
-      <p class="big">${fmt(amt)} <small>/ ${fmt(h.goal)} ${esc(h.unit)} today</small></p>
-      <div class="chips">
-        <button class="chip" data-d="${-h.step}">−${fmt(h.step)}</button>
-        <button class="chip" data-d="${h.step}">+${fmt(h.step)}</button>
-        <button class="chip" data-d="${h.step * 2}">+${fmt(h.step * 2)}</button>
-        <button class="chip" data-d="${Math.max(0, h.goal - amt)}">Fill goal</button>
-      </div>
-      <label class="field">Add a custom amount
-        <span class="goal"><input id="custom" type="number" inputmode="decimal" step="any" placeholder="e.g. 1"><span class="unit">${esc(h.unit)}</span></span>
-      </label>
-      <div class="actions"><button class="ghost" id="close">Close</button><button class="add" id="addc">Add</button></div>
-    `, panel => {
-      panel.querySelectorAll('.chip').forEach(b => b.onclick = () => { addAmount(h, today, parseFloat(b.dataset.d)); draw(); });
-      $('close').onclick = closeSheet;
-      $('addc').onclick = () => {
-        const v = parseFloat($('custom').value);
-        if (v) { addAmount(h, today, v); draw(); } else $('custom').focus();
-      };
-    });
-  };
-  draw();
+  const question = /water|drink|hydrat/i.test(h.name) ? 'How much did you drink?' : 'How much did you do?';
+  const quick = [h.step, h.step * 2, h.step * 4].filter(v => v <= h.goal * 1.5);
+  const amt = amountOn(h, today);
+  openSheet(`
+    <h2>${question}</h2>
+    <p class="sub">${esc(h.name)} · ${fmt(amt)} / ${fmt(h.goal)} ${esc(h.unit)} today</p>
+    <div class="goal"><input id="custom" class="big-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="unit">${esc(h.unit)}</span></div>
+    <div class="chips quick">
+      ${quick.map(v => `<button class="chip" data-d="${v}">+${fmt(v)} ${esc(h.unit)}</button>`).join('')}
+      ${amt > 0 ? `<button class="chip" data-d="${-Math.min(amt, h.step)}">Undo −${fmt(Math.min(amt, h.step))}</button>` : ''}
+    </div>
+    <div class="actions"><button class="ghost" id="close">Cancel</button><button class="add" id="addc">Add</button></div>
+  `, panel => {
+    const input = $('custom');
+    const done = v => { addAmount(h, today, v); closeSheet(); };
+    panel.querySelectorAll('.chip').forEach(b => b.onclick = () => done(parseFloat(b.dataset.d)));
+    $('close').onclick = closeSheet;
+    $('addc').onclick = () => {
+      const v = parseFloat(input.value.replace(',', '.'));
+      if (v > 0) done(v); else input.focus();
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') $('addc').click(); };
+    input.focus();
+  });
 }
 
 $('form').onsubmit = e => {

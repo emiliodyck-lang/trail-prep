@@ -8,7 +8,8 @@
 - **Tap to mark a habit done. Tap again to undo.** No confirmations, notes or mood prompts.
 - **Streak + 7-day strip** on each row, so you see progress without leaving the screen.
 - **Adding a habit is one text field + one question.** Type a name, hit enter, and a sheet asks how to track it: just check it off, or track an amount. Known words suggest units ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…) with a sensible daily goal already filled in. "Other unit…" handles anything else. All habits are daily.
-- **Amount habits:** the round button adds a fixed step (+0.25 L, +5 pages). Tap the habit to open a sheet with −/+ buttons, "Fill goal", and a custom amount. The day counts as done when the goal is reached.
+- **Amount habits:** tapping the round **+** asks "How much did you drink?" with the keyboard already open. Type the amount (1 or 1,5), hit Add. Quick buttons (+0.25 / +0.5 / +1 L) and an undo sit underneath. The day counts as done when the goal is reached.
+- **All inputs use 16px text** so iPhones don't auto-zoom the page when you tap into one.
 - **Tap the dots in the 7-day strip** to fix past days you forgot to log.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Works as an installable PWA.
 - **Export/import JSON** so data doesn't get stuck in one browser.
