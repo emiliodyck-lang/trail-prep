@@ -4,15 +4,14 @@
 **Logging a habit takes one tap, no extra screens.** Every feature gets judged by whether it slows that down.
 
 ## What's in v1
-- **Opening the app shows Today.** No dashboard or splash screen: just today's habits as big tap targets.
-- **Tap to mark a habit done. Tap again to undo.** No confirmations, notes or mood prompts.
-- **Streak + 7-day strip** on each row, so you see progress without leaving the screen.
-- **Adding a habit is one text field + one optional question.** Type a name, hit enter, and a sheet lets you attach a daily goal in a unit ("Drink water · 2 L"). Known words suggest units ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…) with a sensible goal filled in. "Other unit…" handles anything else, "No unit" skips it.
-- **Every habit is done or not done.** The goal is just a label on the habit. No partial amounts to log. (We tried amount logging with +0.25 L buttons; it was more work per day than it was worth.)
-- **All inputs use 16px text** so iPhones don't auto-zoom the page when you tap into one.
-- **Tap the dots in the 7-day strip** to fix past days you forgot to log.
-- **Offline, no account, no backend.** Data stays on the device (localStorage). Works as an installable PWA.
-- **Export/import JSON** so data doesn't get stuck in one browser.
+- **Home screen is a grid of big circles, 6 per page** (2 × 3). Each habit has its own color. Tap a circle to mark it done: it fills solid and shows a ✓. Tap again to undo.
+- **Swipe left/right for more pages.** Habit 7 starts page 2, and so on. Dots at the bottom show which page you're on. Adding a habit jumps to its page.
+- **Small + in the top right** opens "New habit": a name, then optionally a unit and daily goal ("Drink water · 2 L"). Known words suggest units as you type ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…). "Other unit…" handles anything else, "No unit" skips it.
+- **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
+- **Search bar at the bottom** filters the circles by name.
+- **Hold a circle** to open its menu: see the streak, tap any of the last 7 days to fix a day you forgot, or delete it.
+- **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
+- **All inputs use 16px text** so iPhones don't auto-zoom the page.
 
 ## Left out on purpose
 | Feature | Why not (yet) |
@@ -21,7 +20,7 @@
 | Custom schedules (3x/week, weekdays) | Most-requested feature and the biggest complexity trap. Add it only after daily habits prove out. |
 | Reminders / push | Web push is flaky on iOS. Build this in the native version. |
 | Gamification (points, badges, levels) | Works for a week, then gets annoying. The streak is enough. |
-| Categories, colors, icons | Setup busywork people do once and then abandon the app. |
+| Categories, icons, picking colors | Setup busywork people do once and then abandon the app. Colors are assigned automatically. |
 | Charts / analytics | Nobody opens them after the first week. The 7-day strip covers 90% of it. |
 
 ## Data model
