@@ -3,7 +3,7 @@
   "short_name": "Habits",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0e1320",
-  "theme_color": "#0e1320",
+  "background_color": "#5b7cfa",
+  "theme_color": "#5b7cfa",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

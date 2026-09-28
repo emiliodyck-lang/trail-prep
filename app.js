@@ -3,6 +3,25 @@ const PER_PAGE = 6;
 const PALETTE = ['#ff6b6b', '#f59f00', '#12b886', '#4c6ef5', '#845ef7', '#e64980'];
 const $ = id => document.getElementById(id);
 
+// Background gradients: [top, middle, bottom]. Picked with the 🎨 button, remembered per device.
+const THEMES = [
+  ['Violet', '#5b7cfa', '#9b5de5', '#e05cb5'],
+  ['Sunset', '#ff8a4c', '#ff4f7b', '#c2409b'],
+  ['Ocean', '#2f6fe4', '#1596c9', '#12a88a'],
+  ['Forest', '#11865f', '#2f9e44', '#7a9a12'],
+  ['Night', '#262463', '#4a3fc4', '#8b3fd9'],
+];
+const THEME_KEY = 'habits.theme';
+function applyTheme(i) {
+  const [, a, b, c] = THEMES[i] || THEMES[0];
+  const st = document.body.style;
+  st.setProperty('--g1', a); st.setProperty('--g2', b); st.setProperty('--g3', c);
+  document.querySelector('meta[name=theme-color]').content = a;
+}
+let themeIndex = 0;
+try { themeIndex = +localStorage.getItem(THEME_KEY) || 0; } catch {}
+applyTheme(themeIndex);
+
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const daysAgo = n => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return d; };
 const fmt = n => String(Math.round(n * 100) / 100);
@@ -22,6 +41,7 @@ const PRESETS = [
 const EMOJI = [
   [/water|hydrat/i, ['💧', '🥤', '🚰', '🧊']],
   [/read|book/i, ['📚', '📖', '🤓']],
+  [/dog/i, ['🐕', '🦮']],
   [/run|jog/i, ['🏃', '👟', '🏅']],
   [/walk|step|hike/i, ['🚶', '👟', '🥾', '🌳']],
   [/bike|cycl/i, ['🚴', '🚲']],
@@ -49,7 +69,6 @@ const EMOJI = [
   [/skin|face/i, ['🧴', '✨']],
   [/clean|tidy/i, ['🧹', '🧽', '✨']],
   [/plant/i, ['🪴', '🌱']],
-  [/dog/i, ['🐕', '🦮']],
   [/pray|church|bible/i, ['🙏', '✝️']],
   [/call|family|mom|dad|friend/i, ['📞', '❤️']],
   [/save|money|budget/i, ['💰', '🐷']],
@@ -158,18 +177,17 @@ function render() {
     const page = el('div', 'page');
     for (const h of shown.slice(start, start + PER_PAGE)) {
       const done = h.done.includes(today);
-      const cell = el('div', 'cell');
-      const c = el('button', 'circle' + (done ? ' done' : ''));
-      c.style.setProperty('--c', PALETTE[h.color % PALETTE.length]);
-      c.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
-      if (done) c.append(el('span', 'badge', '✓'));
-      if (h.emoji) c.append(el('span', 'e', h.emoji));
-      c.append(el('span', 'n', h.name));
+      const cell = el('button', 'habit' + (done ? ' done' : ''));
+      cell.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
+      const ring = el('span', 'ring');
+      ring.append(h.emoji ? el('span', 'e', h.emoji) : el('span', 'i', firstGrapheme(h.name).toUpperCase()));
+      const label = el('span', 'label');
+      label.append(el('span', 'n', (done ? '✓ ' : '') + h.name));
       const s = streak(h);
       const info = [h.unit ? `${fmt(h.goal)} ${h.unit}` : '', s ? `🔥 ${s}` : ''].filter(Boolean).join(' · ');
-      if (info) c.append(el('span', 'g', info));
-      pressable(c, () => toggle(h, today), () => openEditSheet(h));
-      cell.append(c);
+      if (info) label.append(el('span', 'g', info));
+      cell.append(ring, label);
+      pressable(cell, () => toggle(h, today), () => openEditSheet(h));
       page.append(cell);
     }
     pagesEl.append(page);
@@ -284,6 +302,26 @@ function openAddSheet() {
   name.focus();
 }
 $('add').onclick = openAddSheet;
+
+function openThemeSheet() {
+  const draw = () => openSheet(`
+    <h2>Colors</h2>
+    <p class="sub">${THEMES[themeIndex][0]}</p>
+    <div class="themes">${THEMES.map(([n, a, b, c], i) =>
+      `<button class="swatch${i === themeIndex ? ' sel' : ''}" data-i="${i}" aria-label="${n}" style="background:linear-gradient(160deg, ${a}, ${b}, ${c})"></button>`).join('')}</div>
+    <div class="actions"><button class="primary" id="close">Done</button></div>
+  `, panel => {
+    panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
+      themeIndex = +b.dataset.i;
+      applyTheme(themeIndex);
+      try { localStorage.setItem(THEME_KEY, themeIndex); } catch {}
+      draw();
+    });
+    $('close').onclick = closeSheet;
+  });
+  draw();
+}
+$('theme').onclick = openThemeSheet;
 
 // Holding a circle: change the emoji, fix past days, or delete the habit.
 function openEditSheet(h) {
