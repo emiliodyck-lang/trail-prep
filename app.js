@@ -153,6 +153,7 @@ function pressable(node, onTap, onHold) {
   node.addEventListener('contextmenu', e => e.preventDefault());
 }
 
+let justToggled = null;
 const pagesEl = $('pages');
 const currentPage = () => Math.round(pagesEl.scrollLeft / (pagesEl.clientWidth || 1));
 function goToPage(i) { pagesEl.scrollTo({ left: i * pagesEl.clientWidth, behavior: 'instant' }); updateDots(); }
@@ -177,17 +178,21 @@ function render() {
     const page = el('div', 'page');
     for (const h of shown.slice(start, start + PER_PAGE)) {
       const done = h.done.includes(today);
-      const cell = el('button', 'habit' + (done ? ' done' : ''));
+      // The habit just tapped starts in its old state so the ring can animate to the new one.
+      const animate = h.id === justToggled;
+      const cell = el('button', 'habit' + (done !== animate ? ' done' : ''));
+      if (animate) requestAnimationFrame(() => requestAnimationFrame(() => cell.classList.toggle('done', done)));
       cell.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
       const ring = el('span', 'ring');
-      ring.append(h.emoji ? el('span', 'e', h.emoji) : el('span', 'i', firstGrapheme(h.name).toUpperCase()));
+      ring.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="48"/><circle class="arc" cx="50" cy="50" r="48" pathLength="100"/></svg>';
+      ring.append(h.emoji ? el('span', 'e', h.emoji) : el('span', 'i', firstGrapheme(h.name).toUpperCase()), el('span', 'ok', '✓'));
       const label = el('span', 'label');
-      label.append(el('span', 'n', (done ? '✓ ' : '') + h.name));
+      label.append(el('span', 'n', h.name));
       const s = streak(h);
       const info = [h.unit ? `${fmt(h.goal)} ${h.unit}` : '', s ? `🔥 ${s}` : ''].filter(Boolean).join(' · ');
       if (info) label.append(el('span', 'g', info));
       cell.append(ring, label);
-      pressable(cell, () => toggle(h, today), () => openEditSheet(h));
+      pressable(cell, () => { justToggled = h.id; toggle(h, today); justToggled = null; }, () => openEditSheet(h));
       page.append(cell);
     }
     pagesEl.append(page);

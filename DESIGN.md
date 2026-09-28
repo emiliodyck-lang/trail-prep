@@ -4,7 +4,7 @@
 **Logging a habit takes one tap, no extra screens.** Every feature gets judged by whether it slows that down.
 
 ## What's in v1
-- **Home screen is a grid of big rings, 6 per page** (2 × 3), on a full-screen color gradient (Streaks-style). Each ring holds the habit's emoji as a white silhouette (or its first letter), with the name in bold caps underneath. Tap to complete: the ring turns solid white and the emoji shows in full color. Tap again to undo.
+- **Home screen is a grid of big rings, 6 per page** (2 × 3), on a full-screen color gradient (Streaks-style). Each ring holds the habit's emoji as a white silhouette (or its first letter), with the name in bold caps underneath. The emoji always stays white. Tap to complete: a slim white ring sweeps around the circle like a progress bar and a ✓ badge pops in. Tap again to undo (the ring sweeps back).
 - **🎨 button** switches between 5 gradients (Violet, Sunset, Ocean, Forest, Night), remembered on the device.
 - **Swipe left/right for more pages.** Habit 7 starts page 2, and so on. Dots at the bottom show which page you're on. Adding a habit jumps to its page.
 - **Small + in the top right** opens "New habit": a name, then optionally a unit and daily goal ("Drink water · 2 L"). Known words suggest units as you type ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…). "Other unit…" handles anything else, "No unit" skips it.
