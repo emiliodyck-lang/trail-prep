@@ -18,6 +18,65 @@ const PRESETS = [
   { match: /meditat|stretch|study|practi|exercise|workout|yoga|journal|plank/i, units: [['minutes', 15]] },
 ];
 
+// Keyword -> suggested emojis. First match wins; DEFAULT_EMOJI when nothing matches.
+const EMOJI = [
+  [/water|hydrat/i, ['💧', '🥤', '🚰', '🧊']],
+  [/read|book/i, ['📚', '📖', '🤓']],
+  [/run|jog/i, ['🏃', '👟', '🏅']],
+  [/walk|step|hike/i, ['🚶', '👟', '🥾', '🌳']],
+  [/bike|cycl/i, ['🚴', '🚲']],
+  [/swim/i, ['🏊', '🌊']],
+  [/meditat|mindful|breath/i, ['🧘', '🕯️', '🌿']],
+  [/yoga|stretch/i, ['🧘', '🤸']],
+  [/sleep|bed/i, ['😴', '🛌', '🌙']],
+  [/push.?up|pull.?up|sit.?up|squat|burpee|plank|gym|workout|exercise|lift/i, ['💪', '🏋️', '🔥']],
+  [/guitar/i, ['🎸', '🎶']],
+  [/piano/i, ['🎹', '🎶']],
+  [/music|sing|practi/i, ['🎵', '🎤', '🎶']],
+  [/journal|write|diary/i, ['✍️', '📓', '🖊️']],
+  [/study|learn|homework|school/i, ['📝', '🎓', '🧠']],
+  [/language|spanish|french|german|english|duolingo/i, ['🗣️', '🌍', '🦉']],
+  [/code|program/i, ['💻', '⌨️']],
+  [/vitamin|pill|medic/i, ['💊']],
+  [/fruit|veg|salad|eat|healthy|food/i, ['🥦', '🍎', '🥗']],
+  [/cook|meal/i, ['🍳', '🥘']],
+  [/coffee/i, ['☕']],
+  [/sugar|sweet|candy/i, ['🍬', '🚫']],
+  [/alcohol|beer|drink(?!.*water)/i, ['🚫', '🍺']],
+  [/smok|vape/i, ['🚭']],
+  [/phone|screen|social|scroll/i, ['📵', '📱']],
+  [/teeth|floss|brush/i, ['🦷', '🪥']],
+  [/skin|face/i, ['🧴', '✨']],
+  [/clean|tidy/i, ['🧹', '🧽', '✨']],
+  [/plant/i, ['🪴', '🌱']],
+  [/dog/i, ['🐕', '🦮']],
+  [/pray|church|bible/i, ['🙏', '✝️']],
+  [/call|family|mom|dad|friend/i, ['📞', '❤️']],
+  [/save|money|budget/i, ['💰', '🐷']],
+];
+const DEFAULT_EMOJI = ['⭐', '✅', '🎯', '💪', '❤️', '🔥'];
+const suggestEmoji = name => (EMOJI.find(([re]) => re.test(name)) || [, DEFAULT_EMOJI])[1];
+const firstGrapheme = str => {
+  const t = str.trim();
+  if (!t) return '';
+  return window.Intl && Intl.Segmenter ? [...new Intl.Segmenter().segment(t)][0].segment : [...t][0];
+};
+
+// Renders "no emoji / suggestions / type your own" into box. onPick('') clears it.
+function emojiPicker(box, name, current, onPick) {
+  const options = [...new Set([...(current ? [current] : []), ...suggestEmoji(name)])];
+  box.innerHTML = `
+    <div class="field">Emoji (optional)</div>
+    <div class="chips emojis">
+      <button class="chip${current ? '' : ' sel'}" data-e="">None</button>
+      ${options.map(e => `<button class="chip emo${e === current ? ' sel' : ''}" data-e="${esc(e)}">${esc(e)}</button>`).join('')}
+      <input class="own" maxlength="8" placeholder="Your own" aria-label="Type your own emoji">
+    </div>`;
+  box.querySelectorAll('.chip').forEach(b => b.onclick = () => onPick(b.dataset.e));
+  const own = box.querySelector('.own');
+  own.oninput = () => { const e = firstGrapheme(own.value); if (e) onPick(e); };
+}
+
 let state = load();
 
 function load() {
@@ -103,11 +162,12 @@ function render() {
       const c = el('button', 'circle' + (done ? ' done' : ''));
       c.style.setProperty('--c', PALETTE[h.color % PALETTE.length]);
       c.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
-      if (done) c.append(el('span', 'tick', '✓'));
+      if (done) c.append(el('span', 'badge', '✓'));
+      if (h.emoji) c.append(el('span', 'e', h.emoji));
       c.append(el('span', 'n', h.name));
-      if (h.unit) c.append(el('span', 'g', `${fmt(h.goal)} ${h.unit}`));
       const s = streak(h);
-      if (s) c.append(el('span', 's', `🔥 ${s}`));
+      const info = [h.unit ? `${fmt(h.goal)} ${h.unit}` : '', s ? `🔥 ${s}` : ''].filter(Boolean).join(' · ');
+      if (info) c.append(el('span', 'g', info));
       pressable(c, () => toggle(h, today), () => openEditSheet(h));
       cell.append(c);
       page.append(cell);
@@ -140,15 +200,17 @@ $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 
 // Name, then optionally a daily goal in some unit (e.g. 2 L). Suggested units follow the name as you type.
 function openAddSheet() {
-  const pick = { mode: 'none', goal: '', unit: '', auto: true };
+  const pick = { mode: 'none', goal: '', unit: '', auto: true, emoji: '' };
   openSheet(`
     <h2>New habit</h2>
     <label class="field">Name<span class="goal"><input id="hname" maxlength="40" placeholder="e.g. Drink water" autocomplete="off"></span></label>
+    <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
     <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button></div>
   `, () => {});
   const name = $('hname');
+  const drawEmoji = () => emojiPicker($('emo'), name.value, pick.emoji, e => { pick.emoji = e; drawEmoji(); });
   const unitsFor = n => (PRESETS.find(p => p.match.test(n)) || { units: [] }).units;
 
   // Only the unit chips and goal field redraw, so the name box keeps focus and the keyboard stays up.
@@ -192,6 +254,7 @@ function openAddSheet() {
       pick.goal = first ? first[1] : '';
     }
     drawOpts();
+    drawEmoji();
   };
   $('cancel').onclick = closeSheet;
   $('export').onclick = exportData;
@@ -202,6 +265,7 @@ function openAddSheet() {
     const last = state.habits[state.habits.length - 1];
     const h = { id: 'h_' + Date.now().toString(36), name: n, created: ymd(daysAgo(0)), done: [],
       color: last ? (last.color + 1) % PALETTE.length : 0 };
+    if (pick.emoji) h.emoji = pick.emoji;
     if (pick.mode !== 'none') {
       const g = parseFloat(String(pick.goal).replace(',', '.'));
       const u = pick.mode === 'other' ? pick.unit.trim() : pick.mode;
@@ -216,11 +280,12 @@ function openAddSheet() {
     goToPage(Math.floor((state.habits.length - 1) / PER_PAGE));
   };
   drawOpts();
+  drawEmoji();
   name.focus();
 }
 $('add').onclick = openAddSheet;
 
-// Holding a circle: fix past days or delete the habit.
+// Holding a circle: change the emoji, fix past days, or delete the habit.
 function openEditSheet(h) {
   const color = PALETTE[h.color % PALETTE.length];
   const draw = () => {
@@ -229,13 +294,19 @@ function openEditSheet(h) {
       return `<button class="day${h.done.includes(key) ? ' on' : ''}" data-day="${key}">${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
     }).join('');
     openSheet(`
-      <h2>${esc(h.name)}</h2>
+      <h2>${h.emoji ? esc(h.emoji) + ' ' : ''}${esc(h.name)}</h2>
       <p class="sub">${h.unit ? `${fmt(h.goal)} ${esc(h.unit)} a day · ` : ''}${streak(h) ? `🔥 ${streak(h)} day streak` : 'No streak yet'}</p>
       <p class="sub">Tap a day to mark it done or not done.</p>
       <div class="days" style="--c:${color}">${days}</div>
+      <div id="emo"></div>
       <div class="actions"><button class="danger" id="del">Delete</button><button class="primary" id="close">Done</button></div>
     `, panel => {
       panel.querySelectorAll('.day').forEach(b => b.onclick = () => { toggle(h, b.dataset.day); draw(); });
+      emojiPicker($('emo'), h.name, h.emoji || '', e => {
+        if (e) h.emoji = e; else delete h.emoji;
+        save();
+        draw();
+      });
       $('close').onclick = closeSheet;
       $('del').onclick = () => {
         if (confirm(`Delete "${h.name}" and its history?`)) {

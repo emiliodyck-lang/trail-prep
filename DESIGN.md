@@ -7,6 +7,7 @@
 - **Home screen is a grid of big circles, 6 per page** (2 × 3). Each habit has its own color. Tap a circle to mark it done: it fills solid and shows a ✓. Tap again to undo.
 - **Swipe left/right for more pages.** Habit 7 starts page 2, and so on. Dots at the bottom show which page you're on. Adding a habit jumps to its page.
 - **Small + in the top right** opens "New habit": a name, then optionally a unit and daily goal ("Drink water · 2 L"). Known words suggest units as you type ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…). "Other unit…" handles anything else, "No unit" skips it.
+- **Optional emoji per habit.** The New habit sheet suggests emojis from the name ("water" → 💧🥤🚰🧊, "guitar" → 🎸🎶; generic ⭐✅🎯 when nothing matches), and you can type your own or pick None. Holding a circle lets you change it later. The emoji sits big above the name; done circles get a small ✓ badge in the corner.
 - **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
 - **Search bar at the bottom** filters the circles by name.
 - **Hold a circle** to open its menu: see the streak, tap any of the last 7 days to fix a day you forgot, or delete it.
