@@ -6,61 +6,49 @@ const daysAgo = n => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(
 const fmt = n => String(Math.round(n * 100) / 100);
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Keyword -> suggested units as [unit, default daily goal, quick-add step].
+// Keyword -> suggested units as [unit, default daily goal].
 const PRESETS = [
-  { match: /water|hydrat/i, units: [['L', 2, 0.25], ['oz', 64, 8], ['glasses', 8, 1], ['ml', 2000, 250]] },
-  { match: /read|book/i, units: [['pages', 10, 5], ['minutes', 20, 5]] },
-  { match: /walk|run|jog|step|hike/i, units: [['steps', 8000, 1000], ['km', 5, 1], ['mi', 3, 0.5], ['minutes', 30, 5]] },
-  { match: /push.?up|sit.?up|squat|pull.?up|burpee/i, units: [['reps', 50, 10]] },
-  { match: /sleep/i, units: [['hours', 8, 1]] },
-  { match: /meditat|stretch|study|practi|exercise|workout|yoga|journal|plank/i, units: [['minutes', 15, 5]] },
+  { match: /water|hydrat/i, units: [['L', 2], ['oz', 64], ['glasses', 8], ['ml', 2000]] },
+  { match: /read|book/i, units: [['pages', 10], ['minutes', 20]] },
+  { match: /walk|run|jog|step|hike/i, units: [['steps', 8000], ['km', 5], ['mi', 3], ['minutes', 30]] },
+  { match: /push.?up|sit.?up|squat|pull.?up|burpee/i, units: [['reps', 50]] },
+  { match: /sleep/i, units: [['hours', 8]] },
+  { match: /meditat|stretch|study|practi|exercise|workout|yoga|journal|plank/i, units: [['minutes', 15]] },
 ];
-
-// Largest round step that takes at least ~4 taps to hit the goal.
-function niceStep(goal) {
-  const steps = [1000, 500, 250, 100, 50, 10, 5, 2, 1, 0.5, 0.25, 0.1];
-  return steps.find(s => s <= goal / 4) || 0.1;
-}
 
 let state = load();
 
 function load() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || { habits: [] }; }
-  catch { return { habits: [] }; }
+  let s;
+  try { s = JSON.parse(localStorage.getItem(KEY)) || { habits: [] }; }
+  catch { s = { habits: [] }; }
+  // Older versions logged partial amounts per day; a day counts as done if the goal was reached.
+  for (const h of s.habits) {
+    if (h.log) {
+      h.done = Object.keys(h.log).filter(d => h.log[d] >= h.goal);
+      delete h.log; delete h.type; delete h.step;
+    }
+    h.done = h.done || [];
+  }
+  return s;
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
   render();
 }
-const buzz = () => { if (navigator.vibrate) navigator.vibrate(10); };
 
-const isAmount = h => h.type === 'amount';
-const amountOn = (h, date) => h.log[date] || 0;
-const isDone = (h, date) => isAmount(h) ? amountOn(h, date) >= h.goal : h.done.includes(date);
-
-function addAmount(h, date, delta) {
-  const v = Math.max(0, Math.round((amountOn(h, date) + delta) * 1000) / 1000);
-  if (v) h.log[date] = v; else delete h.log[date];
-  buzz();
-  save();
-}
-
-// Past-day dots flip a day between "not done" and "done" (the full goal for amount habits).
 function toggle(h, date) {
-  if (isAmount(h)) {
-    if (isDone(h, date)) delete h.log[date]; else h.log[date] = h.goal;
-  } else {
-    const i = h.done.indexOf(date);
-    if (i === -1) h.done.push(date); else h.done.splice(i, 1);
-  }
-  buzz();
+  const i = h.done.indexOf(date);
+  if (i === -1) h.done.push(date); else h.done.splice(i, 1);
+  if (navigator.vibrate) navigator.vibrate(10);
   save();
 }
 
 // Consecutive done days ending today, or ending yesterday if today isn't logged yet.
 function streak(h) {
-  let n = 0, i = isDone(h, ymd(daysAgo(0))) ? 0 : 1;
-  while (isDone(h, ymd(daysAgo(i)))) { n++; i++; }
+  const set = new Set(h.done);
+  let n = 0, i = set.has(ymd(daysAgo(0))) ? 0 : 1;
+  while (set.has(ymd(daysAgo(i)))) { n++; i++; }
   return n;
 }
 
@@ -79,39 +67,30 @@ function render() {
   let doneCount = 0;
 
   for (const h of state.habits) {
-    const done = isDone(h, today);
+    const done = h.done.includes(today);
     if (done) doneCount++;
     const li = el('li', done ? 'done' : '');
 
-    const check = el('button', 'check' + (isAmount(h) ? ' plus' : ''), isAmount(h) ? '+' : '✓');
-    check.setAttribute('aria-label', isAmount(h) ? `Log ${h.unit} for ${h.name}` : `${done ? 'Unmark' : 'Mark'} ${h.name}`);
-    check.onclick = () => isAmount(h) ? openLogSheet(h) : toggle(h, today);
+    const check = el('button', 'check', '✓');
+    check.setAttribute('aria-label', `${done ? 'Unmark' : 'Mark'} ${h.name}`);
+    check.onclick = () => toggle(h, today);
 
     const body = el('div', 'body');
-    body.onclick = () => isAmount(h) ? openLogSheet(h) : toggle(h, today);
+    body.onclick = () => toggle(h, today);
+    const name = el('div', 'name', h.name);
+    if (h.unit) name.append(el('span', 'target', ` · ${fmt(h.goal)} ${h.unit}`));
     const meta = el('div', 'meta');
     const week = el('span', 'week');
     for (let i = 6; i >= 0; i--) {
       const d = daysAgo(i), key = ymd(d);
-      const dot = el('button', 'dot' + (isDone(h, key) ? ' on' : ''));
+      const dot = el('button', 'dot' + (h.done.includes(key) ? ' on' : ''));
       dot.title = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
       dot.onclick = e => { e.stopPropagation(); toggle(h, key); };
       week.append(dot);
     }
     const s = streak(h);
     meta.append(week, el('span', '', s ? `🔥 ${s}` : 'No streak'));
-    body.append(el('div', 'name', h.name));
-    if (isAmount(h)) {
-      const amt = amountOn(h, today);
-      const bar = el('div', 'bar');
-      const fill = el('span');
-      fill.style.width = Math.min(100, amt / h.goal * 100) + '%';
-      bar.append(fill);
-      const row = el('div', 'amt');
-      row.append(bar, el('span', '', `${fmt(amt)} / ${fmt(h.goal)} ${h.unit}`));
-      body.append(row);
-    }
-    body.append(meta);
+    body.append(name, meta);
 
     const del = el('button', 'del', '×');
     del.setAttribute('aria-label', `Delete ${h.name}`);
@@ -140,31 +119,32 @@ function openSheet(html, bind) {
 function closeSheet() { $('sheet').hidden = true; }
 $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 
-// Asked right after typing a name: just check it off, or track an amount in some unit.
+// Asked right after typing a name: optionally attach a daily goal in some unit (e.g. 2 L).
 function openAddSheet(name) {
   const preset = PRESETS.find(p => p.match.test(name));
   const units = preset ? preset.units : [];
-  const pick = { mode: units.length ? units[0][0] : 'check', goal: units.length ? units[0][1] : '' };
+  const pick = { mode: units.length ? units[0][0] : 'none', goal: units.length ? units[0][1] : '' };
 
   const draw = () => {
     const chip = (mode, label) => `<button class="chip${pick.mode === mode ? ' sel' : ''}" data-mode="${esc(mode)}">${esc(label)}</button>`;
-    const amountFields = pick.mode === 'check' ? '' : `
+    const goalFields = pick.mode === 'none' ? '' : `
       <label class="field">Daily goal
         <span class="goal">
-          <input id="goal" type="number" inputmode="decimal" min="0" step="any" value="${pick.goal}" placeholder="e.g. 10">
+          <input id="goal" type="text" inputmode="decimal" autocomplete="off" value="${pick.goal}" placeholder="e.g. 10">
           ${pick.mode === 'other'
             ? `<input id="unit" placeholder="unit, e.g. cups" maxlength="12" value="${esc(pick.unit || '')}">`
             : `<span class="unit">${esc(pick.mode)}</span>`}
         </span>
       </label>`;
     openSheet(`
-      <h2>How do you want to track “${esc(name)}”?</h2>
+      <h2>Add “${esc(name)}”</h2>
+      <p class="sub">Pick a unit to set a daily goal, or skip it.</p>
       <div class="chips">
-        ${chip('check', '✓ Just check it off')}
+        ${chip('none', 'No unit')}
         ${units.map(u => chip(u[0], u[0])).join('')}
         ${chip('other', 'Other unit…')}
       </div>
-      ${amountFields}
+      ${goalFields}
       <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="add" id="save">Add habit</button></div>
     `, panel => {
       panel.querySelectorAll('.chip').forEach(b => b.onclick = () => {
@@ -180,18 +160,15 @@ function openAddSheet(name) {
       if (unit) unit.oninput = () => { pick.unit = unit.value; };
       $('cancel').onclick = closeSheet;
       $('save').onclick = () => {
-        const base = { id: 'h_' + Date.now().toString(36), name, created: ymd(daysAgo(0)) };
-        if (pick.mode === 'check') {
-          state.habits.push({ ...base, done: [] });
-        } else {
-          const g = parseFloat(pick.goal);
+        const h = { id: 'h_' + Date.now().toString(36), name, created: ymd(daysAgo(0)), done: [] };
+        if (pick.mode !== 'none') {
+          const g = parseFloat(String(pick.goal).replace(',', '.'));
           const u = pick.mode === 'other' ? (pick.unit || '').trim() : pick.mode;
           if (!(g > 0)) return goal.focus();
           if (!u) return unit.focus();
-          const preset = units.find(x => x[0] === u);
-          const step = preset && preset[2] <= g ? preset[2] : niceStep(g);
-          state.habits.push({ ...base, type: 'amount', unit: u, goal: g, step, log: {} });
+          Object.assign(h, { unit: u, goal: g });
         }
+        state.habits.push(h);
         $('name').value = '';
         closeSheet();
         save();
@@ -199,35 +176,6 @@ function openAddSheet(name) {
     });
   };
   draw();
-}
-
-// Tapping an amount habit asks "how much?" with the keyboard already up, plus quick buttons.
-function openLogSheet(h) {
-  const today = ymd(daysAgo(0));
-  const question = /water|drink|hydrat/i.test(h.name) ? 'How much did you drink?' : 'How much did you do?';
-  const quick = [h.step, h.step * 2, h.step * 4].filter(v => v <= h.goal * 1.5);
-  const amt = amountOn(h, today);
-  openSheet(`
-    <h2>${question}</h2>
-    <p class="sub">${esc(h.name)} · ${fmt(amt)} / ${fmt(h.goal)} ${esc(h.unit)} today</p>
-    <div class="goal"><input id="custom" class="big-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0"><span class="unit">${esc(h.unit)}</span></div>
-    <div class="chips quick">
-      ${quick.map(v => `<button class="chip" data-d="${v}">+${fmt(v)} ${esc(h.unit)}</button>`).join('')}
-      ${amt > 0 ? `<button class="chip" data-d="${-Math.min(amt, h.step)}">Undo −${fmt(Math.min(amt, h.step))}</button>` : ''}
-    </div>
-    <div class="actions"><button class="ghost" id="close">Cancel</button><button class="add" id="addc">Add</button></div>
-  `, panel => {
-    const input = $('custom');
-    const done = v => { addAmount(h, today, v); closeSheet(); };
-    panel.querySelectorAll('.chip').forEach(b => b.onclick = () => done(parseFloat(b.dataset.d)));
-    $('close').onclick = closeSheet;
-    $('addc').onclick = () => {
-      const v = parseFloat(input.value.replace(',', '.'));
-      if (v > 0) done(v); else input.focus();
-    };
-    input.onkeydown = e => { if (e.key === 'Enter') $('addc').click(); };
-    input.focus();
-  });
 }
 
 $('form').onsubmit = e => {
@@ -250,7 +198,11 @@ $('file').onchange = async e => {
   try {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.habits)) throw new Error('bad file');
-    if (confirm('Replace current habits with the imported file?')) { state = data; save(); }
+    if (confirm('Replace current habits with the imported file?')) {
+      localStorage.setItem(KEY, JSON.stringify(data));
+      state = load();
+      save();
+    }
   } catch { alert('That file is not a valid habits export.'); }
   e.target.value = '';
 };

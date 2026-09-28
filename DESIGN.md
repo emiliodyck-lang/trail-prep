@@ -7,8 +7,8 @@
 - **Opening the app shows Today.** No dashboard or splash screen: just today's habits as big tap targets.
 - **Tap to mark a habit done. Tap again to undo.** No confirmations, notes or mood prompts.
 - **Streak + 7-day strip** on each row, so you see progress without leaving the screen.
-- **Adding a habit is one text field + one question.** Type a name, hit enter, and a sheet asks how to track it: just check it off, or track an amount. Known words suggest units ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…) with a sensible daily goal already filled in. "Other unit…" handles anything else. All habits are daily.
-- **Amount habits:** tapping the round **+** asks "How much did you drink?" with the keyboard already open. Type the amount (1 or 1,5), hit Add. Quick buttons (+0.25 / +0.5 / +1 L) and an undo sit underneath. The day counts as done when the goal is reached.
+- **Adding a habit is one text field + one optional question.** Type a name, hit enter, and a sheet lets you attach a daily goal in a unit ("Drink water · 2 L"). Known words suggest units ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…) with a sensible goal filled in. "Other unit…" handles anything else, "No unit" skips it.
+- **Every habit is done or not done.** The goal is just a label on the habit. No partial amounts to log. (We tried amount logging with +0.25 L buttons; it was more work per day than it was worth.)
 - **All inputs use 16px text** so iPhones don't auto-zoom the page when you tap into one.
 - **Tap the dots in the 7-day strip** to fix past days you forgot to log.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Works as an installable PWA.
@@ -28,7 +28,7 @@
 ```json
 { "habits": [
   { "id": "h_x1", "name": "Meditate", "created": "2026-09-28", "done": ["2026-09-27", "2026-09-28"] },
-  { "id": "h_x2", "name": "Drink water", "created": "2026-09-28", "type": "amount", "unit": "L", "goal": 2, "step": 0.25, "log": { "2026-09-28": 1.5 } }
+  { "id": "h_x2", "name": "Drink water", "created": "2026-09-28", "unit": "L", "goal": 2, "done": ["2026-09-28"] }
 ] }
 ```
 Unit suggestions come from a keyword list in `app.js` (`PRESETS`), not AI. It's instant, free and works offline, and a public site can't safely hold an AI API key.

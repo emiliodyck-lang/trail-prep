@@ -1,5 +1,5 @@
 // Network first (bypassing the 10-min HTTP cache) so updates show up right away; cache is the offline fallback.
-const CACHE = 'habits-v3';
+const CACHE = 'habits-v4';
 const ASSETS = ['./', 'index.html', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); });
 self.addEventListener('activate', e => e.waitUntil(

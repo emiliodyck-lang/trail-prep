@@ -25,6 +25,7 @@
   li.done .check { background:var(--done); border-color:var(--done); color:#fff; }
   .body { flex:1; min-width:0; cursor:pointer; }
   .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .target { font-weight:500; color:var(--muted); }
   .meta { color:var(--muted); font-size:13px; display:flex; gap:10px; align-items:center; margin-top:4px; }
   .week { display:flex; gap:4px; }
   .dot { width:14px; height:14px; border-radius:4px; background:var(--line); border:0; padding:0; cursor:pointer; }
@@ -34,11 +35,6 @@
   form div { max-width:560px; margin:0 auto; display:flex; gap:8px; }
   input { flex:1; min-width:0; font:inherit; font-size:16px; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); }
   button.add { font:inherit; font-weight:600; padding:0 18px; border-radius:12px; border:0; background:var(--text); color:var(--bg); cursor:pointer; }
-  .check.plus { width:48px; height:48px; padding:0; font-size:26px; font-weight:500; line-height:1; color:var(--text); }
-  li.done .check.plus { color:#fff; }
-  .amt { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
-  .bar { flex:1; height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
-  .bar span { display:block; height:100%; background:var(--done); border-radius:3px; }
   .sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; z-index:10; }
   .sheet[hidden] { display:none; }
   .panel { width:100%; max-width:560px; margin:0 auto; background:var(--card); border-radius:20px 20px 0 0; padding:20px 16px calc(20px + env(safe-area-inset-bottom)); }
@@ -50,11 +46,7 @@
   .goal { display:flex; gap:8px; align-items:center; margin-top:6px; }
   .goal input { flex:1; }
   .unit { color:var(--text); font-weight:600; }
-  .big { font-size:34px; font-weight:700; margin:0 0 14px; font-variant-numeric:tabular-nums; }
-  .big small { font-size:15px; color:var(--muted); font-weight:500; }
-  .big-input { font-size:28px !important; font-weight:700; padding:14px 16px; }
   .sub { color:var(--muted); margin:-8px 0 14px; font-size:14px; }
-  .chips.quick { margin-top:12px; }
   .actions { display:flex; gap:8px; }
   .actions button { flex:1; padding:14px; }
   .ghost { font:inherit; border-radius:12px; border:1px solid var(--line); background:none; color:var(--text); cursor:pointer; }
