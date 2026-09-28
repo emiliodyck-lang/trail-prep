@@ -34,6 +34,27 @@
   form div { max-width:560px; margin:0 auto; display:flex; gap:8px; }
   input { flex:1; min-width:0; font:inherit; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); }
   button.add { font:inherit; font-weight:600; padding:0 18px; border-radius:12px; border:0; background:var(--text); color:var(--bg); cursor:pointer; }
+  .check.plus { font-size:14px; font-weight:700; color:var(--text); }
+  li.done .check.plus { color:#fff; }
+  .amt { display:flex; align-items:center; gap:8px; margin-top:6px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .bar { flex:1; height:6px; border-radius:3px; background:var(--line); overflow:hidden; }
+  .bar span { display:block; height:100%; background:var(--done); border-radius:3px; }
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; z-index:10; }
+  .sheet[hidden] { display:none; }
+  .panel { width:100%; max-width:560px; margin:0 auto; background:var(--card); border-radius:20px 20px 0 0; padding:20px 16px calc(20px + env(safe-area-inset-bottom)); }
+  .panel h2 { font-size:19px; margin:0 0 14px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  .chip { font:inherit; padding:10px 14px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
+  .chip.sel { background:var(--done); border-color:var(--done); color:#fff; font-weight:600; }
+  .field { display:block; color:var(--muted); font-size:14px; margin-bottom:16px; }
+  .goal { display:flex; gap:8px; align-items:center; margin-top:6px; }
+  .goal input { flex:1; }
+  .unit { color:var(--text); font-weight:600; }
+  .big { font-size:34px; font-weight:700; margin:0 0 14px; font-variant-numeric:tabular-nums; }
+  .big small { font-size:15px; color:var(--muted); font-weight:500; }
+  .actions { display:flex; gap:8px; }
+  .actions button { flex:1; padding:14px; }
+  .ghost { font:inherit; border-radius:12px; border:1px solid var(--line); background:none; color:var(--text); cursor:pointer; }
   .empty { color:var(--muted); text-align:center; padding:48px 0; }
   footer { margin-top:24px; display:flex; gap:16px; justify-content:center; font-size:13px; }
   footer button { background:none; border:0; color:var(--muted); cursor:pointer; text-decoration:underline; font:inherit; }
@@ -53,6 +74,7 @@
 <form id="form" autocomplete="off">
   <div><input id="name" placeholder="New habit, e.g. Drink water" maxlength="60" required><button class="add">Add</button></div>
 </form>
+<div id="sheet" class="sheet" hidden><div class="panel"></div></div>
 <script src="app.js"></script>
 </body>
 </html>

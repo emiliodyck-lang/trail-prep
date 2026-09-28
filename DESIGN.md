@@ -7,7 +7,8 @@
 - **Opening the app shows Today.** No dashboard or splash screen: just today's habits as big tap targets.
 - **Tap to mark a habit done. Tap again to undo.** No confirmations, notes or mood prompts.
 - **Streak + 7-day strip** on each row, so you see progress without leaving the screen.
-- **Adding a habit is one text field.** Type a name, hit enter. Every habit is daily. Nothing else to set.
+- **Adding a habit is one text field + one question.** Type a name, hit enter, and a sheet asks how to track it: just check it off, or track an amount. Known words suggest units ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…) with a sensible daily goal already filled in. "Other unit…" handles anything else. All habits are daily.
+- **Amount habits:** the round button adds a fixed step (+0.25 L, +5 pages). Tap the habit to open a sheet with −/+ buttons, "Fill goal", and a custom amount. The day counts as done when the goal is reached.
 - **Tap the dots in the 7-day strip** to fix past days you forgot to log.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Works as an installable PWA.
 - **Export/import JSON** so data doesn't get stuck in one browser.
@@ -24,8 +25,12 @@
 
 ## Data model
 ```json
-{ "habits": [{ "id": "h_x1", "name": "Read 10 pages", "created": "2026-09-28", "done": ["2026-09-27", "2026-09-28"] }] }
+{ "habits": [
+  { "id": "h_x1", "name": "Meditate", "created": "2026-09-28", "done": ["2026-09-27", "2026-09-28"] },
+  { "id": "h_x2", "name": "Drink water", "created": "2026-09-28", "type": "amount", "unit": "L", "goal": 2, "step": 0.25, "log": { "2026-09-28": 1.5 } }
+] }
 ```
+Unit suggestions come from a keyword list in `app.js` (`PRESETS`), not AI. It's instant, free and works offline, and a public site can't safely hold an AI API key.
 Dates are local `YYYY-MM-DD` strings, so there are no timezone bugs.
 A streak counts consecutive done days back from today. If today isn't done yet, it counts back from yesterday, so the streak doesn't show 0 all morning.
 
