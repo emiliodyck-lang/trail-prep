@@ -87,10 +87,19 @@
   .primary { border:0; background:var(--text); color:var(--bg); }
   .ghost { border:1px solid var(--line); background:none; color:var(--text); }
   .danger { border:0; background:none; color:var(--danger); }
-  .days { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin-bottom:18px; }
-  .day { font:inherit; font-size:12px; padding:8px 0; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
+  .days { display:flex; gap:6px; overflow-x:auto; margin:0 -16px 18px; padding:0 16px 4px; scroll-snap-type:x proximity; scrollbar-width:none; }
+  .days::-webkit-scrollbar { display:none; }
+  .day { flex:0 0 50px; scroll-snap-align:end; font:inherit; font-size:12px; padding:6px 0 8px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
+  .day i { display:block; height:14px; font-style:normal; font-size:11px; font-weight:700; color:var(--muted); }
+  .day.on i { color:inherit; }
   .day b { display:block; font-size:16px; }
   .day.on { background:var(--c); border-color:var(--c); color:#fff; }
+  .title-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  #edit-emoji { font-size:22px; }
+  #edit-emoji:empty { display:none; }
+  .title-input { flex:1; font-size:20px; font-weight:700; padding:6px 8px; margin-left:-8px; border-color:transparent; background:transparent; }
+  .title-input:focus { border-color:var(--line); background:var(--bg); outline:none; }
+  .pen { color:var(--muted); font-size:18px; pointer-events:none; }
   .links { margin-top:14px; text-align:center; font-size:13px; color:var(--muted); }
   .links button { background:none; border:0; color:var(--muted); text-decoration:underline; font:inherit; cursor:pointer; }
 </style>

@@ -328,39 +328,66 @@ function openThemeSheet() {
 }
 $('theme').onclick = openThemeSheet;
 
-// Holding a circle: change the emoji, fix past days, or delete the habit.
+// Holding a circle: rename, fix any of the past year's days, change the emoji, or delete.
+const HISTORY_DAYS = 365;
 function openEditSheet(h) {
   const color = PALETTE[h.color % PALETTE.length];
-  const draw = () => {
-    const days = Array.from({ length: 7 }, (_, i) => daysAgo(6 - i)).map(d => {
-      const key = ymd(d);
-      return `<button class="day${h.done.includes(key) ? ' on' : ''}" data-day="${key}">${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
-    }).join('');
-    openSheet(`
-      <h2>${h.emoji ? esc(h.emoji) + ' ' : ''}${esc(h.name)}</h2>
-      <p class="sub">${h.unit ? `${fmt(h.goal)} ${esc(h.unit)} a day · ` : ''}${streak(h) ? `🔥 ${streak(h)} day streak` : 'No streak yet'}</p>
-      <p class="sub">Tap a day to mark it done or not done.</p>
-      <div class="days" style="--c:${color}">${days}</div>
-      <div id="emo"></div>
-      <div class="actions"><button class="danger" id="del">Delete</button><button class="primary" id="close">Done</button></div>
-    `, panel => {
-      panel.querySelectorAll('.day').forEach(b => b.onclick = () => { toggle(h, b.dataset.day); draw(); });
-      emojiPicker($('emo'), h.name, h.emoji || '', e => {
-        if (e) h.emoji = e; else delete h.emoji;
-        save();
-        draw();
-      });
-      $('close').onclick = closeSheet;
-      $('del').onclick = () => {
-        if (confirm(`Delete "${h.name}" and its history?`)) {
-          state.habits = state.habits.filter(x => x !== h);
-          closeSheet();
-          save();
-        }
-      };
-    });
+  const streakText = () => {
+    const n = streak(h);
+    return `${h.unit ? `${fmt(h.goal)} ${esc(h.unit)} a day · ` : ''}${n ? `🔥 ${n} day streak` : 'No streak yet'}`;
   };
-  draw();
+  // Oldest on the left, today on the far right; a month label marks the 1st and the first chip.
+  const days = Array.from({ length: HISTORY_DAYS }, (_, i) => daysAgo(HISTORY_DAYS - 1 - i)).map((d, i) => {
+    const key = ymd(d);
+    const month = i === 0 || d.getDate() === 1 ? d.toLocaleDateString(undefined, { month: 'short' }) : '';
+    return `<button class="day${h.done.includes(key) ? ' on' : ''}" data-day="${key}"><i>${month}</i>${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
+  }).join('');
+  openSheet(`
+    <div class="title-row"><span id="edit-emoji">${h.emoji ? esc(h.emoji) : ''}</span>
+      <input id="rename" class="title-input" maxlength="40" value="${esc(h.name)}" aria-label="Habit name" autocomplete="off" enterkeyhint="done"><span class="pen" aria-hidden="true">✎</span></div>
+    <p class="sub" id="edit-streak">${streakText()}</p>
+    <p class="sub">Tap a day to mark it done or not done. Swipe for earlier days.</p>
+    <div class="days" style="--c:${color}">${days}</div>
+    <div id="emo"></div>
+    <div class="actions"><button class="danger" id="del">Delete</button><button class="primary" id="close">Done</button></div>
+  `, panel => {
+    const strip = panel.querySelector('.days');
+    strip.scrollLeft = strip.scrollWidth;
+    // Update just the tapped chip so the strip keeps its scroll position.
+    strip.onclick = e => {
+      const b = e.target.closest('.day');
+      if (!b) return;
+      toggle(h, b.dataset.day);
+      b.classList.toggle('on', h.done.includes(b.dataset.day));
+      $('edit-streak').innerHTML = streakText();
+    };
+
+    const rename = $('rename');
+    const commit = () => {
+      const n = rename.value.trim();
+      if (n && n !== h.name) { h.name = n; save(); }
+      rename.value = h.name;
+    };
+    rename.onchange = commit;
+    rename.onkeydown = e => { if (e.key === 'Enter') rename.blur(); };
+
+    const drawEmoji = () => emojiPicker($('emo'), h.name, h.emoji || '', e => {
+      if (e) h.emoji = e; else delete h.emoji;
+      $('edit-emoji').textContent = h.emoji || '';
+      save();
+      drawEmoji();
+    });
+    drawEmoji();
+
+    $('close').onclick = () => { commit(); closeSheet(); };
+    $('del').onclick = () => {
+      if (confirm(`Delete "${h.name}" and its history?`)) {
+        state.habits = state.habits.filter(x => x !== h);
+        closeSheet();
+        save();
+      }
+    };
+  });
 }
 
 function exportData() {

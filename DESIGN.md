@@ -11,7 +11,7 @@
 - **Optional emoji per habit.** The New habit sheet suggests emojis from the name ("water" → 💧🥤🚰🧊, "guitar" → 🎸🎶; generic ⭐✅🎯 when nothing matches), and you can type your own or pick None. Holding a circle lets you change it later. 
 - **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
 - **Search bar at the bottom** filters the circles by name.
-- **Hold a circle** to open its menu: see the streak, tap any of the last 7 days to fix a day you forgot, or delete it.
+- **Hold a circle** to open its menu: tap the name at the top to rename it, see the streak, swipe through a day strip (today on the right, up to a year back, month labels on the 1st) and tap any day to fix it, change the emoji, or delete it.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
 - **All inputs use 16px text** so iPhones don't auto-zoom the page.
 
