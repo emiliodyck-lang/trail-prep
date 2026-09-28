@@ -228,7 +228,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 12</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 13</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => emojiPicker($('emo'), name.value, pick.emoji, e => { pick.emoji = e; drawEmoji(); });
@@ -428,129 +428,191 @@ function computeStats(habits, range) {
   return { days, done, possible, perfect, weekday, from, today };
 }
 
-// Daily bars for week/month; monthly bars for year/all time.
-const daily = (st, range) => range === 'week' || range === 'month' || st.days.length <= 31;
-function buckets(st, range) {
-  if (daily(st, range)) {
-    return st.days.map(x => {
-      const date = new Date(x.d * 864e5);
-      return { ...x, short: st.days.length <= 7 ? date.toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' }) : String(date.getUTCDate()),
-        long: date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) };
-    });
-  }
-  const map = new Map();
-  for (const x of st.days) {
-    const k = x.key.slice(0, 7);
-    if (!map.has(k)) {
-      const date = new Date(x.d * 864e5);
-      map.set(k, { done: 0, possible: 0, short: date.toLocaleDateString(undefined, { month: 'narrow', timeZone: 'UTC' }),
-        long: date.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' }) });
-    }
-    const b = map.get(k); b.done += x.done; b.possible += x.possible;
-  }
-  return [...map.values()];
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const fmtDay = (d, opts) => new Date(d * 864e5).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
+
+// Trend points: the week shows each day's rate; longer ranges use a 7-day rolling rate so the line
+// moves like a stock chart instead of jumping between 0% and 100%.
+function trendPoints(st, range) {
+  const win = range === 'week' ? 1 : 7;
+  return st.days.map((x, i) => {
+    let dn = 0, ps = 0;
+    for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += st.days[j].done; ps += st.days[j].possible; }
+    const date = fmtDay(x.d, { weekday: 'short', month: 'short', day: 'numeric', year: range === 'all' || range === 'year' ? 'numeric' : undefined });
+    return { v: ps ? dn / ps * 100 : null,
+      tip: ps ? `${date}: ${Math.round(dn / ps * 100)}%${win > 1 ? ' (last 7 days)' : ` (${dn} of ${ps})`}` : `${date}: nothing to do yet` };
+  });
 }
 
-const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+function lineChart(points, first, last) {
+  const W = 300, H = 120, n = points.length;
+  const x = i => n === 1 ? W / 2 : i / (n - 1) * W, y = v => H - v / 100 * H;
+  let line = '', pen = false;
+  points.forEach((p, i) => {
+    if (p.v == null) { pen = false; return; }
+    line += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`; pen = true;
+  });
+  // Area under each unbroken segment.
+  const segs = []; let cur = [];
+  points.forEach((p, i) => { if (p.v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push(i); });
+  if (cur.length) segs.push(cur);
+  const area = segs.map(sg => `M${x(sg[0]).toFixed(1)},${H}` + sg.map(i => `L${x(i).toFixed(1)},${y(points[i].v).toFixed(1)}`).join('') + `L${x(sg[sg.length - 1]).toFixed(1)},${H}Z`).join('');
+  const lastI = points.map(p => p.v != null).lastIndexOf(true);
+  return `<div class="lchart">
+    <div class="readout" aria-live="polite">${lastI >= 0 ? esc(points[lastI].tip) : 'No data yet'}</div>
+    <div class="lplot">
+      <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
+      <div class="lsvg">
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+          <path d="${area}" fill="url(#lg)"/>
+          <path d="${line}" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <span class="xhair" hidden></span><span class="xdot" hidden></span>
+      </div>
+    </div>
+    <div class="xlabels"><span>${esc(first)}</span><span>${esc(last)}</span></div>
+  </div>`;
+}
 
-function barChart(id, items, labelEvery) {
-  return `<div class="chart" id="${id}">
+// Drag or tap across the line to read any day.
+function bindLineChart(root, points) {
+  const box = root.querySelector('.lsvg'), out = root.querySelector('.readout');
+  const hair = root.querySelector('.xhair'), dot = root.querySelector('.xdot');
+  const n = points.length;
+  const at = e => {
+    const r = box.getBoundingClientRect();
+    let i = Math.round(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (n - 1));
+    const p = points[i];
+    const left = n === 1 ? 50 : i / (n - 1) * 100;
+    hair.hidden = false; hair.style.left = left + '%';
+    dot.hidden = p.v == null; if (p.v != null) { dot.style.left = left + '%'; dot.style.top = (100 - p.v) + '%'; }
+    out.textContent = p.tip;
+  };
+  box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); at(e); });
+  box.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || box.hasPointerCapture(e.pointerId)) at(e); });
+}
+
+function barChart(items) {
+  return `<div class="bchart">
     <div class="readout" aria-live="polite">Tap a bar for details</div>
     <div class="plot">
       <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
-      <div class="bars">${items.map((b, i) => `
+      <div class="bars">${items.map(b => `
         <button class="bar" data-tip="${esc(b.long)}: ${b.possible ? `${pct(b.done, b.possible)}% (${b.done} of ${b.possible})` : 'nothing to do yet'}">
           <span class="fill${b.possible ? '' : ' none'}" style="height:${b.possible ? Math.max(2, pct(b.done, b.possible)) : 0}%"></span>
-          <span class="tick">${i % labelEvery === 0 ? esc(b.short) : ''}</span>
+          <span class="tick">${esc(b.short)}</span>
         </button>`).join('')}
       </div>
     </div>
   </div>`;
 }
 
+const ringFace = h => h.emoji ? `<span class="e">${esc(h.emoji)}</span>` : `<span class="i">${esc(firstGrapheme(h.name).toUpperCase())}</span>`;
+
 function openStats() {
   const view = $('stats');
-  const draw = () => {
-    const habits = state.habits;
-    if (!habits.length) {
-      view.innerHTML = `<div class="stats-in"><div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
-        <p class="stats-empty">Add a habit to see your stats.</p></div>`;
-      $('stats-close').onclick = closeStats;
-      return;
-    }
-    const one = habits.find(h => h.id === statsView.habit);
-    if (!one) statsView.habit = 'all';
-    const sel = one ? [one] : habits;
-    const st = computeStats(sel, statsView.range);
-    const rate = pct(st.done, st.possible);
-    const rangeName = RANGES.find(r => r[0] === statsView.range)[3];
-
-    let tiles;
-    if (one) {
-      tiles = [
-        ['Completions', `${st.done}<small> of ${st.possible} days</small>`],
-        ['Current streak', `${streak(one)}<small> days</small>`],
-        ['Longest streak', `${longestStreak(one)}<small> days</small>`],
-        ['All-time total', `${one.done.length}<small> times</small>`],
-      ];
-    } else {
-      const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
-      tiles = [
-        ['Completions', `${st.done}<small> of ${st.possible}</small>`],
-        ['Best streak', `${best[0]}<small> days</small><em>${best[0] ? esc((best[1].emoji ? best[1].emoji + ' ' : '') + best[1].name) : '&nbsp;'}</em>`],
-        ['Perfect days', `${st.perfect}<small> all done</small>`],
-        ['Habits', `${habits.length}<small> tracked</small>`],
-      ];
-    }
-
-    const b = buckets(st, statsView.range);
-    const every = b.length <= 12 ? 1 : b.length <= 31 ? 5 : Math.ceil(b.length / 8);
-    const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const wd = st.weekday.map((w, i) => ({ ...w, short: names[i][0], long: names[i] }));
-    const ranked = wd.filter(w => w.possible).sort((a, c) => pct(c.done, c.possible) - pct(a.done, a.possible));
-    const wdNote = ranked.length > 1
-      ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
-      : 'Keep going to see which days work best.';
-
-    view.innerHTML = `<div class="stats-in">
-      <div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
-      <div class="pick">
-        <button class="pchip${one ? '' : ' sel'}" data-h="all">All habits</button>
-        ${habits.map(h => `<button class="pchip${one === h ? ' sel' : ''}" data-h="${h.id}">${h.emoji ? esc(h.emoji) + ' ' : ''}${esc(h.name)}</button>`).join('')}
-      </div>
-      <div class="seg">${RANGES.map(([k, label]) => `<button class="${statsView.range === k ? 'sel' : ''}" data-r="${k}">${label}</button>`).join('')}</div>
-      <div class="hero">
-        <div class="hero-n">${rate}<span>%</span></div>
-        <div class="hero-t">completion rate, ${rangeName}<br><b>${st.done} of ${st.possible}</b> ${one ? 'days done' : 'check-offs done'}</div>
-      </div>
-      <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><div class="tk">${k}</div><div class="tv">${v}</div></div>`).join('')}</div>
-      <h3>${daily(st, statsView.range) ? 'Each day' : 'Each month'}</h3>
-      ${barChart('trend', b, every)}
-      <h3>By day of the week</h3>
-      ${barChart('weekdays', wd, 1)}
-      <p class="note">${wdNote}</p>
-    </div>`;
+  const habits = state.habits;
+  if (!habits.length) {
+    view.innerHTML = `<div class="stats-in"><div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
+      <p class="stats-empty">Add a habit to see your stats.</p></div>`;
     $('stats-close').onclick = closeStats;
-    view.querySelectorAll('.pchip').forEach(x => x.onclick = () => { statsView.habit = x.dataset.h; draw(); });
-    view.querySelectorAll('.seg button').forEach(x => x.onclick = () => { statsView.range = x.dataset.r; draw(); });
-    view.querySelectorAll('.chart').forEach(chart => {
-      const out = chart.querySelector('.readout');
-      chart.querySelectorAll('.bar').forEach(bar => {
-        const show = () => {
-          chart.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on'));
-          bar.classList.add('on');
-          out.textContent = bar.dataset.tip;
-        };
-        bar.onclick = show;
-        bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
-      });
-    });
-    const sc = view.querySelector('.pick .sel');
-    if (sc) sc.scrollIntoView({ block: 'nearest', inline: 'center' });
-  };
-  draw();
+    view.hidden = false;
+    return;
+  }
+  if (!habits.some(h => h.id === statsView.habit)) statsView.habit = 'all';
+
+  // Slide 0 is "All habits" (a row of mini rings that drifts when there are more than 5), then one slide per habit.
+  const drift = habits.length > 5;
+  const minis = habits.map(h => `<span class="mini">${ringFace(h)}</span>`).join('');
+  view.innerHTML = `<div class="stats-in">
+      <div class="stats-top">
+        <button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1>
+        <label class="range">
+          <select id="range" aria-label="Time range">${RANGES.map(([k, label]) => `<option value="${k}"${statsView.range === k ? ' selected' : ''}>${label}</option>`).join('')}</select>
+        </label>
+      </div>
+    </div>
+    <div class="carousel" id="carousel">
+      <div class="slide">
+        <div class="minis${drift ? ' drift' : ''}"><div class="track" style="--n:${habits.length}">${minis}${drift ? minis : ''}</div></div>
+        <div class="slide-name">All habits</div>
+      </div>
+      ${habits.map(h => `<div class="slide"><span class="big">${ringFace(h)}</span><div class="slide-name">${esc(h.name)}</div></div>`).join('')}
+    </div>
+    <div class="dots sdots" id="sdots">${['all', ...habits].map(() => '<span></span>').join('')}</div>
+    <div class="stats-in"><hr class="sep"><div id="stats-body"></div></div>`;
+
+  const car = $('carousel');
+  const idxOf = () => Math.round(car.scrollLeft / (car.clientWidth || 1));
+  const markDots = i => [...$('sdots').children].forEach((d, j) => d.classList.toggle('on', i === j));
+  const start = statsView.habit === 'all' ? 0 : habits.findIndex(h => h.id === statsView.habit) + 1;
   view.hidden = false;
   view.scrollTop = 0;
+  car.scrollTo({ left: start * car.clientWidth, behavior: 'instant' });
+  markDots(start);
+  car.addEventListener('scroll', () => {
+    const i = idxOf();
+    markDots(i);
+    const id = i === 0 ? 'all' : habits[i - 1] && habits[i - 1].id;
+    if (id && id !== statsView.habit) { statsView.habit = id; drawBody(); }
+  }, { passive: true });
+
+  $('range').onchange = e => { statsView.range = e.target.value; drawBody(); };
+  $('stats-close').onclick = closeStats;
+  drawBody();
+}
+
+function drawBody() {
+  const habits = state.habits;
+  const one = habits.find(h => h.id === statsView.habit);
+  const st = computeStats(one ? [one] : habits, statsView.range);
+  const range = RANGES.find(r => r[0] === statsView.range);
+
+  const nums = one ? [
+    [`${pct(st.done, st.possible)}%`, 'completion'],
+    [`${st.done}<small>/${st.possible}</small>`, 'days done'],
+    [one.done.length, 'all-time total'],
+    [streak(one), 'current streak'],
+    [longestStreak(one), 'longest streak'],
+  ] : (() => {
+    const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
+    return [
+      [`${pct(st.done, st.possible)}%`, 'completion'],
+      [`${st.done}<small>/${st.possible}</small>`, 'check-offs'],
+      [best[0], `best streak${best[0] ? `<span class="who">${esc((best[1].emoji ? best[1].emoji + ' ' : '') + best[1].name)}</span>` : ''}`],
+    ];
+  })();
+
+  const pts = trendPoints(st, statsView.range);
+  const yr = statsView.range === 'all' || statsView.range === 'year' ? { year: 'numeric' } : {};
+  const first = fmtDay(st.from, { month: 'short', day: 'numeric', ...yr }), last = 'Today';
+
+  const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const wd = st.weekday.map((w, i) => ({ ...w, short: names[i][0], long: names[i] }));
+  const ranked = wd.filter(w => w.possible).sort((a, c) => pct(c.done, c.possible) - pct(a.done, a.possible));
+  const wdNote = ranked.length > 1
+    ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
+    : 'Keep going to see which days work best.';
+
+  const body = $('stats-body');
+  body.innerHTML = `
+    <p class="range-note">${range[3][0].toUpperCase() + range[3].slice(1)}</p>
+    <div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>
+    <hr class="sep">
+    <h3>${statsView.range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
+    ${lineChart(pts, first, last)}
+    <hr class="sep">
+    <h3>By day of the week</h3>
+    ${barChart(wd)}
+    <p class="note">${wdNote}</p>`;
+  bindLineChart(body.querySelector('.lchart'), pts);
+  const bc = body.querySelector('.bchart'), out = bc.querySelector('.readout');
+  bc.querySelectorAll('.bar').forEach(bar => {
+    const show = () => { bc.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on')); bar.classList.add('on'); out.textContent = bar.dataset.tip; };
+    bar.onclick = show;
+    bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
+  });
 }
 function closeStats() { $('stats').hidden = true; }
 $('stats-btn').onclick = openStats;

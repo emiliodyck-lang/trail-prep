@@ -11,11 +11,11 @@
 - **Optional emoji per habit.** The New habit sheet suggests emojis from the name ("water" → 💧🥤🚰🧊, "guitar" → 🎸🎶; generic ⭐✅🎯 when nothing matches), and you can type your own or pick None. Holding a circle lets you change it later. 
 - **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
 - **📊 Stats button at the bottom** (replaced the search bar) opens a full stats screen:
-  - Pick **All habits** or any single habit, and a range: **Week / Month / Year / All time** (last 7 / 30 / 365 days, or since the first habit).
+  - **Swipe a carousel** at the top to pick what you're looking at: first slide is **All habits** (a row of mini rings; with more than 5 it slowly drifts and fades at the edges), then one slide per habit with a big ring. Dots show the position.
+  - **Range** is a small dropdown top-right: Week / Month / Year / All time (last 7 / 30 / 365 days, or since the first habit).
   - **Completion rate** = check-offs done ÷ check-offs possible. 2 habits × 10 days = 20 possible; missing 2 = 18 of 20 = 90%. A habit only counts from the day it was created (or its earliest backfilled day). **Today only counts once it's done**, so the rate doesn't drop every morning.
-  - All habits: completions, best streak (and which habit), perfect days (everything done), habits tracked.
-  - One habit: "9 of 10 days", current streak, longest streak, all-time total.
-  - **Bar chart** of the rate per day (per month for year / all time with more than a month of history). Tap a bar for the exact numbers.
+  - Plain big numbers, no boxes. All habits: completion %, check-offs (done/possible), best streak (and which habit). One habit: completion %, days done, all-time total, current streak, longest streak.
+  - **Trend line** (stock-chart style, area underneath): each point is the 7-day rolling rate (the week view shows each day). Drag a finger across it to read any day.
   - **By day of the week** chart plus "Best on Mondays, weakest on Fridays", to show where you slip.
 - **Hold a circle** to open its menu: tap the name at the top to rename it, see the streak, swipe through a day strip (today on the right, up to a year back, month labels on the 1st) and tap any day to fix it, change the emoji, or delete it.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
