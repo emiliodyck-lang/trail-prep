@@ -1,8 +1,8 @@
 // Bump VERSION (and app.js?v= in index.html) on every release.
 // Network first, bypassing the HTTP cache, so updates show up right away; cache is the offline fallback.
-const VERSION = 13;
+const VERSION = 14;
 const CACHE = 'habits-v' + VERSION;
-const ASSETS = ['./', 'index.html', 'app.js?v=' + VERSION, 'manifest.webmanifest', 'icon.svg'];
+const ASSETS = ['./', 'index.html', 'app.js?v=' + VERSION, 'icons.js?v=' + VERSION, 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))));

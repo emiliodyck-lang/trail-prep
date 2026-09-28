@@ -39,8 +39,11 @@
   .habit:active .ring { transform:scale(.94); }
   .ring .e { font-size:calc(var(--size) * .42); line-height:1; filter:brightness(0) invert(1); }
   .ring .i { font-size:calc(var(--size) * .4); font-weight:800; line-height:1; }
+  .ic { display:grid; place-items:center; color:#fff; }
+  .ic svg { display:block; width:100%; height:100%; }
+  .ring .ic { width:calc(var(--size) * .46); height:calc(var(--size) * .46); }
   /* Slim progress ring: faint track, white arc that sweeps around when done. */
-  .ring svg { position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); overflow:visible; }
+  .ring svg.prog { position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); overflow:visible; }
   .ring circle { fill:none; stroke-width:4; }
   .ring .track { stroke:rgba(255,255,255,.3); }
   /* Hidden when empty so the round cap doesn't leave a dot; stays visible while un-sweeping. */
@@ -88,6 +91,9 @@
   .mini .e, .big .e { filter:brightness(0) invert(1); line-height:1; }
   .mini .e { font-size:24px; } .big .e { font-size:46px; }
   .mini .i { font-size:22px; font-weight:800; } .big .i { font-size:42px; font-weight:800; }
+  .mini .ic { width:26px; height:26px; } .big .ic { width:50px; height:50px; }
+  .nk .wi { display:inline-block; width:13px; height:13px; vertical-align:-2px; margin-right:4px; }
+  .nk .wi svg { width:100%; height:100%; }
   /* Show at most 5; with more, the row drifts and fades in/out at the edges. */
   .minis { max-width:320px; overflow:hidden; }
   .minis .track { display:flex; justify-content:center; }
@@ -137,8 +143,11 @@
   .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
   .chip { font:inherit; padding:10px 14px; border-radius:999px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
   .chip.sel { background:var(--text); border-color:var(--text); color:var(--bg); font-weight:600; }
-  .chip.emo { font-size:22px; padding:6px 12px; line-height:1.2; }
-  .emojis .own { width:110px; flex:none; padding:8px 12px; border-radius:999px; }
+  .chip.ico { width:48px; height:44px; padding:0; display:grid; place-items:center; }
+  .chip.ico svg { width:24px; height:24px; }
+  .icon-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(46px, 1fr)); gap:6px; max-height:220px; overflow-y:auto; margin:-6px 0 16px; padding:2px; }
+  .icon-grid .chip.ico { width:auto; height:44px; border-radius:12px; }
+  .own-row .own { margin-top:6px; }
   .field { display:block; color:var(--muted); font-size:14px; margin-bottom:16px; }
   .goal { display:flex; gap:8px; align-items:center; margin-top:6px; }
   .unit { color:var(--text); font-weight:600; }
@@ -155,7 +164,9 @@
   .day b { display:block; font-size:16px; }
   .day.on { background:var(--c); border-color:var(--c); color:#fff; }
   .title-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-  #edit-emoji { font-size:22px; }
+  #edit-emoji { font-size:22px; width:28px; height:28px; display:grid; place-items:center; }
+  #edit-emoji .ic, #edit-emoji .ic svg { width:26px; height:26px; color:var(--text); }
+  #edit-emoji .e { filter:none; }
   #edit-emoji:empty { display:none; }
   .title-input { flex:1; font-size:20px; font-weight:700; padding:6px 8px; margin-left:-8px; border-color:transparent; background:transparent; }
   .title-input:focus { border-color:var(--line); background:var(--bg); outline:none; }
@@ -178,6 +189,7 @@
 <input type="file" id="file" accept="application/json" hidden>
 <div id="stats" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="app.js?v=13"></script>
+<script src="icons.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

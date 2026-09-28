@@ -37,64 +37,106 @@ const PRESETS = [
   { match: /meditat|stretch|study|practi|exercise|workout|yoga|journal|plank/i, units: [['minutes', 15]] },
 ];
 
-// Keyword -> suggested emojis. First match wins; DEFAULT_EMOJI when nothing matches.
-const EMOJI = [
-  [/water|hydrat/i, ['💧', '🥤', '🚰', '🧊']],
-  [/read|book/i, ['📚', '📖', '🤓']],
-  [/dog/i, ['🐕', '🦮']],
-  [/run|jog/i, ['🏃', '👟', '🏅']],
-  [/walk|step|hike/i, ['🚶', '👟', '🥾', '🌳']],
-  [/bike|cycl/i, ['🚴', '🚲']],
-  [/swim/i, ['🏊', '🌊']],
-  [/meditat|mindful|breath/i, ['🧘', '🕯️', '🌿']],
-  [/yoga|stretch/i, ['🧘', '🤸']],
-  [/sleep|bed/i, ['😴', '🛌', '🌙']],
-  [/push.?up|pull.?up|sit.?up|squat|burpee|plank|gym|workout|exercise|lift/i, ['💪', '🏋️', '🔥']],
-  [/guitar/i, ['🎸', '🎶']],
-  [/piano/i, ['🎹', '🎶']],
-  [/music|sing|practi/i, ['🎵', '🎤', '🎶']],
-  [/journal|write|diary/i, ['✍️', '📓', '🖊️']],
-  [/study|learn|homework|school/i, ['📝', '🎓', '🧠']],
-  [/language|spanish|french|german|english|duolingo/i, ['🗣️', '🌍', '🦉']],
-  [/code|program/i, ['💻', '⌨️']],
-  [/vitamin|pill|medic/i, ['💊']],
-  [/fruit|veg|salad|eat|healthy|food/i, ['🥦', '🍎', '🥗']],
-  [/cook|meal/i, ['🍳', '🥘']],
-  [/coffee/i, ['☕']],
-  [/sugar|sweet|candy/i, ['🍬', '🚫']],
-  [/alcohol|beer|drink(?!.*water)/i, ['🚫', '🍺']],
-  [/smok|vape/i, ['🚭']],
-  [/phone|screen|social|scroll/i, ['📵', '📱']],
-  [/teeth|floss|brush/i, ['🦷', '🪥']],
-  [/skin|face/i, ['🧴', '✨']],
-  [/clean|tidy/i, ['🧹', '🧽', '✨']],
-  [/plant/i, ['🪴', '🌱']],
-  [/pray|church|bible/i, ['🙏', '✝️']],
-  [/call|family|mom|dad|friend/i, ['📞', '❤️']],
-  [/save|money|budget/i, ['💰', '🐷']],
+// Keyword -> suggested icons (names in ICONS, see icons.js). First match wins; DEFAULT_ICONS when nothing matches.
+const ICON_SUGGEST = [
+  [/water|hydrat/i, ['drop', 'drop-half', 'drop-simple']],
+  [/coffee/i, ['coffee', 'coffee-bean']],
+  [/\btea\b/i, ['tea-bag', 'coffee']],
+  [/smok|vape|cigar/i, ['cigarette-slash', 'prohibit', 'cigarette']],
+  [/alcohol|beer|wine|sober|drink/i, ['prohibit', 'beer-bottle', 'wine', 'beer-stein']],
+  [/read|book/i, ['book-open', 'books', 'book', 'book-bookmark']],
+  [/dog/i, ['dog', 'paw-print']],
+  [/\bcats?\b/i, ['cat', 'paw-print']],
+  [/run|jog/i, ['person-simple-run', 'sneaker-move', 'sneaker']],
+  [/hike/i, ['person-simple-hike', 'boot', 'tree']],
+  [/walk|step/i, ['person-simple-walk', 'footprints', 'sneaker']],
+  [/bike|cycl/i, ['person-simple-bike', 'bicycle']],
+  [/swim/i, ['person-simple-swim', 'swimming-pool']],
+  [/meditat|mindful|breath|calm/i, ['flower-lotus', 'person-simple-tai-chi', 'leaf']],
+  [/yoga|stretch/i, ['person-simple-tai-chi', 'flower-lotus']],
+  [/sleep|bed|nap/i, ['bed', 'moon-stars', 'moon']],
+  [/wake|early|alarm|morning/i, ['alarm', 'sun', 'clock']],
+  [/gym|workout|exercise|lift|push.?up|pull.?up|squat|sit.?up|plank|burpee|train/i, ['barbell', 'heartbeat', 'fire', 'lightning']],
+  [/soccer/i, ['soccer-ball']], [/basketball/i, ['basketball']], [/tennis/i, ['tennis-ball']], [/golf/i, ['golf']], [/box/i, ['boxing-glove']],
+  [/guitar/i, ['guitar', 'music-notes']],
+  [/piano/i, ['piano-keys', 'music-notes']],
+  [/music|sing|practi/i, ['music-notes', 'microphone', 'headphones']],
+  [/journal|write|diary/i, ['notebook', 'pencil-simple', 'pen', 'note']],
+  [/study|learn|homework|school|class/i, ['graduation-cap', 'student', 'brain', 'book-open']],
+  [/language|spanish|french|german|english|duolingo/i, ['translate', 'globe', 'chat-circle']],
+  [/code|program/i, ['code', 'laptop', 'keyboard']],
+  [/vitamin|pill|medic/i, ['pill', 'first-aid', 'syringe']],
+  [/sugar|sweet|candy|junk|fast food|snack/i, ['prohibit', 'cookie', 'cake', 'ice-cream', 'hamburger']],
+  [/fruit|veg|salad|healthy|eat/i, ['carrot', 'avocado', 'orange-slice', 'bowl-food']],
+  [/cook|meal|lunch|dinner|breakfast/i, ['cooking-pot', 'fork-knife', 'bowl-steam', 'egg']],
+  [/phone|screen|social|scroll|tiktok|instagram/i, ['device-mobile-slash', 'device-mobile', 'television']],
+  [/teeth|tooth|floss|brush|dent/i, ['tooth', 'sparkle']],
+  [/skin|face|shower|bath/i, ['shower', 'bathtub', 'sparkle', 'hand-soap']],
+  [/clean|tidy|laundry|dishes/i, ['broom', 'washing-machine', 'trash', 'sparkle']],
+  [/plant|garden/i, ['potted-plant', 'plant', 'flower']],
+  [/pray|church|bible|god/i, ['hands-praying', 'cross', 'church']],
+  [/call|family|mom|dad|friend|text/i, ['phone-call', 'users', 'heart', 'chat-circle']],
+  [/save|money|budget|spend|invest/i, ['piggy-bank', 'coins', 'wallet', 'chart-line-up']],
+  [/draw|paint|art/i, ['paint-brush', 'palette', 'pencil-simple']],
+  [/photo/i, ['camera']],
+  [/weigh|scale/i, ['scales']],
+  [/outside|fresh air|\bsun/i, ['sun', 'tree', 'leaf']],
+  [/grateful|gratitude|happy|smile/i, ['smiley', 'heart', 'hand-heart']],
 ];
-const DEFAULT_EMOJI = ['⭐', '✅', '🎯', '💪', '❤️', '🔥'];
-const suggestEmoji = name => (EMOJI.find(([re]) => re.test(name)) || [, DEFAULT_EMOJI])[1];
+const DEFAULT_ICONS = ['star', 'check-circle', 'target', 'fire', 'heart', 'lightning'];
+const suggestIcons = name => (ICON_SUGGEST.find(([re]) => re.test(name)) || [, DEFAULT_ICONS])[1];
+const iconSvg = name => `<svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">${ICONS[name]}</svg>`;
 const firstGrapheme = str => {
   const t = str.trim();
   if (!t) return '';
   return window.Intl && Intl.Segmenter ? [...new Intl.Segmenter().segment(t)][0].segment : [...t][0];
 };
 
-// Renders "no emoji / suggestions / type your own" into box. onPick('') clears it.
-function emojiPicker(box, name, current, onPick) {
-  const options = [...new Set([...(current ? [current] : []), ...suggestEmoji(name)])];
+// What sits inside a habit's ring: its icon, else a custom emoji (white silhouette), else its first letter.
+const faceHTML = h => h.icon && ICONS[h.icon] ? `<span class="ic">${iconSvg(h.icon)}</span>`
+  : h.emoji ? `<span class="e">${esc(h.emoji)}</span>`
+  : `<span class="i">${esc(firstGrapheme(h.name).toUpperCase())}</span>`;
+
+// Emojis the old picker suggested, mapped to the icon that replaces them.
+const EMOJI_TO_ICON = {
+  '💧': 'drop', '🥤': 'drop-half', '🚰': 'drop-simple', '🧊': 'drop-simple', '📚': 'books', '📖': 'book-open', '🤓': 'book-open',
+  '🐕': 'dog', '🦮': 'dog', '🏃': 'person-simple-run', '👟': 'sneaker', '🏅': 'medal', '🚶': 'person-simple-walk', '🥾': 'boot',
+  '🌳': 'tree', '🚴': 'person-simple-bike', '🚲': 'bicycle', '🏊': 'person-simple-swim', '🌊': 'drop', '🧘': 'flower-lotus',
+  '🕯': 'sparkle', '🌿': 'leaf', '🤸': 'person-simple-tai-chi', '😴': 'bed', '🛌': 'bed', '🌙': 'moon', '💪': 'barbell',
+  '🏋': 'barbell', '🔥': 'fire', '🎸': 'guitar', '🎶': 'music-notes', '🎹': 'piano-keys', '🎵': 'music-note', '🎤': 'microphone',
+  '✍': 'pencil-simple', '📓': 'notebook', '🖊': 'pen', '📝': 'note', '🎓': 'graduation-cap', '🧠': 'brain', '🗣': 'chat-circle',
+  '🌍': 'globe', '🦉': 'bird', '💻': 'laptop', '⌨': 'keyboard', '💊': 'pill', '🥦': 'carrot', '🍎': 'orange-slice', '🥗': 'bowl-food',
+  '🍳': 'cooking-pot', '🥘': 'bowl-steam', '☕': 'coffee', '🍬': 'cookie', '🚫': 'prohibit', '🍺': 'beer-bottle', '🚭': 'cigarette-slash',
+  '📵': 'device-mobile-slash', '📱': 'device-mobile', '🦷': 'tooth', '🪥': 'tooth', '🧴': 'hand-soap', '✨': 'sparkle', '🧹': 'broom',
+  '🧽': 'sparkle', '🪴': 'potted-plant', '🌱': 'plant', '🙏': 'hands-praying', '✝': 'cross', '📞': 'phone-call', '❤': 'heart',
+  '💰': 'coins', '🐷': 'piggy-bank', '⭐': 'star', '✅': 'check-circle', '🎯': 'target',
+};
+
+// Renders "no icon / suggested icons / all icons / your own emoji" into box.
+// onPick({ icon }) or onPick({ emoji }) or onPick({}) to clear.
+function iconPicker(box, name, h, onPick) {
+  const cur = h.icon || '';
+  const options = [...new Set([...(cur ? [cur] : []), ...suggestIcons(name)])].filter(n => ICONS[n]);
+  const all = box.dataset.all === '1';
+  const btn = n => `<button class="chip ico${n === cur ? ' sel' : ''}" data-icon="${n}" aria-label="${n.replace(/-/g, ' ')}">${iconSvg(n)}</button>`;
   box.innerHTML = `
-    <div class="field">Emoji (optional)</div>
-    <div class="chips emojis">
-      <button class="chip${current ? '' : ' sel'}" data-e="">None</button>
-      ${options.map(e => `<button class="chip emo${e === current ? ' sel' : ''}" data-e="${esc(e)}">${esc(e)}</button>`).join('')}
-      <input class="own" maxlength="8" placeholder="Your own" aria-label="Type your own emoji">
-    </div>`;
-  box.querySelectorAll('.chip').forEach(b => b.onclick = () => onPick(b.dataset.e));
+    <div class="field">Icon (optional)</div>
+    <div class="chips icons">
+      <button class="chip${cur || h.emoji ? '' : ' sel'}" data-none="1">None</button>
+      ${options.map(btn).join('')}
+      <button class="chip" data-all="1">${all ? 'Fewer' : 'All icons'}</button>
+    </div>
+    ${all ? `<div class="icon-grid">${Object.keys(ICONS).map(btn).join('')}</div>` : ''}
+    <label class="field own-row">Or your own emoji
+      <input class="own" maxlength="8" placeholder="${h.emoji ? esc(h.emoji) : 'e.g. 🎮'}" aria-label="Type your own emoji">
+    </label>`;
+  box.querySelectorAll('[data-icon]').forEach(b => b.onclick = () => onPick({ icon: b.dataset.icon }));
+  box.querySelector('[data-none]').onclick = () => onPick({});
+  box.querySelector('[data-all]').onclick = () => { box.dataset.all = all ? '' : '1'; iconPicker(box, name, h, onPick); };
   const own = box.querySelector('.own');
-  own.oninput = () => { const e = firstGrapheme(own.value); if (e) onPick(e); };
+  own.oninput = () => { const e = firstGrapheme(own.value); if (e) onPick({ emoji: e }); };
 }
+const setFace = (h, f) => { delete h.icon; delete h.emoji; if (f.icon) h.icon = f.icon; if (f.emoji) h.emoji = f.emoji; };
 
 let state = load();
 
@@ -110,6 +152,10 @@ function load() {
     }
     h.done = h.done || [];
     if (h.color == null) h.color = i % PALETTE.length;
+    if (h.emoji && !h.icon) {
+      const icon = EMOJI_TO_ICON[h.emoji.replace(/\uFE0F/g, '')];
+      if (icon) { h.icon = icon; delete h.emoji; }
+    }
   });
   return s;
 }
@@ -183,8 +229,9 @@ function render() {
       if (animate) requestAnimationFrame(() => requestAnimationFrame(() => cell.classList.toggle('done', done)));
       cell.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
       const ring = el('span', 'ring');
-      ring.innerHTML = '<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="48"/><circle class="arc" cx="50" cy="50" r="48" pathLength="100"/></svg>';
-      ring.append(h.emoji ? el('span', 'e', h.emoji) : el('span', 'i', firstGrapheme(h.name).toUpperCase()), el('span', 'ok', '✓'));
+      ring.innerHTML = '<svg class="prog" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="48"/><circle class="arc" cx="50" cy="50" r="48" pathLength="100"/></svg>';
+      ring.insertAdjacentHTML('beforeend', faceHTML(h));
+      ring.append(el('span', 'ok', '✓'));
       const label = el('span', 'label');
       label.append(el('span', 'n', h.name));
       const s = streak(h);
@@ -221,17 +268,17 @@ $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 
 // Name, then optionally a daily goal in some unit (e.g. 2 L). Suggested units follow the name as you type.
 function openAddSheet() {
-  const pick = { mode: 'none', goal: '', unit: '', auto: true, emoji: '' };
+  const pick = { mode: 'none', goal: '', unit: '', auto: true, face: {} };
   openSheet(`
     <h2>New habit</h2>
     <label class="field">Name<span class="goal"><input id="hname" maxlength="40" placeholder="e.g. Drink water" autocomplete="off"></span></label>
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 13</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 14</div>
   `, () => {});
   const name = $('hname');
-  const drawEmoji = () => emojiPicker($('emo'), name.value, pick.emoji, e => { pick.emoji = e; drawEmoji(); });
+  const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
   const unitsFor = n => (PRESETS.find(p => p.match.test(n)) || { units: [] }).units;
 
   // Only the unit chips and goal field redraw, so the name box keeps focus and the keyboard stays up.
@@ -286,7 +333,7 @@ function openAddSheet() {
     const last = state.habits[state.habits.length - 1];
     const h = { id: 'h_' + Date.now().toString(36), name: n, created: ymd(daysAgo(0)), done: [],
       color: last ? (last.color + 1) % PALETTE.length : 0 };
-    if (pick.emoji) h.emoji = pick.emoji;
+    setFace(h, pick.face);
     if (pick.mode !== 'none') {
       const g = parseFloat(String(pick.goal).replace(',', '.'));
       const u = pick.mode === 'other' ? pick.unit.trim() : pick.mode;
@@ -325,7 +372,7 @@ function openThemeSheet() {
 }
 $('theme').onclick = openThemeSheet;
 
-// Holding a circle: rename, fix any of the past year's days, change the emoji, or delete.
+// Holding a circle: rename, fix any of the past year's days, change the icon, or delete.
 const HISTORY_DAYS = 365;
 function openEditSheet(h) {
   const color = PALETTE[h.color % PALETTE.length];
@@ -340,7 +387,7 @@ function openEditSheet(h) {
     return `<button class="day${h.done.includes(key) ? ' on' : ''}" data-day="${key}"><i>${month}</i>${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
   }).join('');
   openSheet(`
-    <div class="title-row"><span id="edit-emoji">${h.emoji ? esc(h.emoji) : ''}</span>
+    <div class="title-row"><span id="edit-emoji" class="face">${h.icon || h.emoji ? faceHTML(h) : ''}</span>
       <input id="rename" class="title-input" maxlength="40" value="${esc(h.name)}" aria-label="Habit name" autocomplete="off" enterkeyhint="done"><span class="pen" aria-hidden="true">✎</span></div>
     <p class="sub" id="edit-streak">${streakText()}</p>
     <p class="sub">Tap a day to mark it done or not done. Swipe for earlier days.</p>
@@ -368,9 +415,9 @@ function openEditSheet(h) {
     rename.onchange = commit;
     rename.onkeydown = e => { if (e.key === 'Enter') rename.blur(); };
 
-    const drawEmoji = () => emojiPicker($('emo'), h.name, h.emoji || '', e => {
-      if (e) h.emoji = e; else delete h.emoji;
-      $('edit-emoji').textContent = h.emoji || '';
+    const drawEmoji = () => iconPicker($('emo'), h.name, h, f => {
+      setFace(h, f);
+      $('edit-emoji').innerHTML = h.icon || h.emoji ? faceHTML(h) : '';
       save();
       drawEmoji();
     });
@@ -508,7 +555,6 @@ function barChart(items) {
   </div>`;
 }
 
-const ringFace = h => h.emoji ? `<span class="e">${esc(h.emoji)}</span>` : `<span class="i">${esc(firstGrapheme(h.name).toUpperCase())}</span>`;
 
 function openStats() {
   const view = $('stats');
@@ -524,7 +570,7 @@ function openStats() {
 
   // Slide 0 is "All habits" (a row of mini rings that drifts when there are more than 5), then one slide per habit.
   const drift = habits.length > 5;
-  const minis = habits.map(h => `<span class="mini">${ringFace(h)}</span>`).join('');
+  const minis = habits.map(h => `<span class="mini">${faceHTML(h)}</span>`).join('');
   view.innerHTML = `<div class="stats-in">
       <div class="stats-top">
         <button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1>
@@ -538,7 +584,7 @@ function openStats() {
         <div class="minis${drift ? ' drift' : ''}"><div class="track" style="--n:${habits.length}">${minis}${drift ? minis : ''}</div></div>
         <div class="slide-name">All habits</div>
       </div>
-      ${habits.map(h => `<div class="slide"><span class="big">${ringFace(h)}</span><div class="slide-name">${esc(h.name)}</div></div>`).join('')}
+      ${habits.map(h => `<div class="slide"><span class="big">${faceHTML(h)}</span><div class="slide-name">${esc(h.name)}</div></div>`).join('')}
     </div>
     <div class="dots sdots" id="sdots">${['all', ...habits].map(() => '<span></span>').join('')}</div>
     <div class="stats-in"><hr class="sep"><div id="stats-body"></div></div>`;
@@ -580,7 +626,7 @@ function drawBody() {
     return [
       [`${pct(st.done, st.possible)}%`, 'completion'],
       [`${st.done}<small>/${st.possible}</small>`, 'check-offs'],
-      [best[0], `best streak${best[0] ? `<span class="who">${esc((best[1].emoji ? best[1].emoji + ' ' : '') + best[1].name)}</span>` : ''}`],
+      [best[0], `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
     ];
   })();
 
