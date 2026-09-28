@@ -165,13 +165,12 @@ function render() {
   const doneCount = state.habits.filter(h => h.done.includes(today)).length;
   $('progress').textContent = total ? `${doneCount} of ${total} done · hold a circle to edit` : '';
 
-  const q = $('search').value.trim().toLowerCase();
-  const shown = state.habits.filter(h => h.name.toLowerCase().includes(q));
+  const shown = state.habits;
   const keep = currentPage();
   pagesEl.replaceChildren();
 
   if (!shown.length) {
-    const p = el('div', 'page empty', total ? 'No habits match your search.' : 'Tap + to add your first habit.');
+    const p = el('div', 'page empty', 'Tap + to add your first habit.');
     pagesEl.append(p);
   }
   for (let start = 0; start < shown.length; start += PER_PAGE) {
@@ -209,7 +208,6 @@ function updateDots() {
   [...$('dots').children].forEach((d, j) => d.classList.toggle('on', i === j));
 }
 pagesEl.addEventListener('scroll', updateDots, { passive: true });
-$('search').addEventListener('input', () => { render(); goToPage(0); });
 
 // ---- Bottom sheet ----
 function openSheet(html, bind) {
@@ -230,7 +228,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 11</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 12</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => emojiPicker($('emo'), name.value, pick.emoji, e => { pick.emoji = e; drawEmoji(); });
@@ -297,7 +295,6 @@ function openAddSheet() {
       Object.assign(h, { unit: u, goal: g });
     }
     state.habits.push(h);
-    $('search').value = '';
     closeSheet();
     save();
     goToPage(Math.floor((state.habits.length - 1) / PER_PAGE));
@@ -389,6 +386,174 @@ function openEditSheet(h) {
     };
   });
 }
+
+// ---- Stats ----
+// A day counts toward a habit from the day it was created (or its earliest logged day, if backfilled).
+// Today only counts once it's done, so the rate doesn't drop every morning.
+const dayNum = key => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
+const keyOf = n => new Date(n * 864e5).toISOString().slice(0, 10);
+const startOf = h => Math.min(dayNum(h.created || ymd(daysAgo(0))), ...h.done.map(dayNum));
+function longestStreak(h) {
+  const days = [...new Set(h.done.map(dayNum))].sort((a, b) => a - b);
+  let best = 0, run = 0;
+  days.forEach((d, i) => { run = i && d === days[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run); });
+  return best;
+}
+const RANGES = [['week', 'Week', 7, 'last 7 days'], ['month', 'Month', 30, 'last 30 days'], ['year', 'Year', 365, 'last 12 months'], ['all', 'All time', 0, 'all time']];
+const statsView = { habit: 'all', range: 'month' };
+
+function computeStats(habits, range) {
+  const today = dayNum(ymd(daysAgo(0)));
+  const earliest = Math.min(...habits.map(startOf));
+  const len = RANGES.find(r => r[0] === range)[2];
+  const from = len ? today - len + 1 : earliest;
+  const days = [];
+  let done = 0, possible = 0, perfect = 0;
+  const weekday = Array.from({ length: 7 }, () => ({ done: 0, possible: 0 }));
+  for (let d = from; d <= today; d++) {
+    const key = keyOf(d);
+    let dd = 0, dp = 0;
+    for (const h of habits) {
+      if (d < startOf(h)) continue;
+      const hit = h.done.includes(key);
+      if (d === today && !hit) continue;
+      dp++; if (hit) dd++;
+    }
+    const wd = (new Date(d * 864e5).getUTCDay() + 6) % 7; // Monday = 0
+    weekday[wd].done += dd; weekday[wd].possible += dp;
+    if (dp && dd === dp && (d !== today || dp === habits.filter(h => d >= startOf(h)).length)) perfect++;
+    done += dd; possible += dp;
+    days.push({ d, key, done: dd, possible: dp });
+  }
+  return { days, done, possible, perfect, weekday, from, today };
+}
+
+// Daily bars for week/month; monthly bars for year/all time.
+const daily = (st, range) => range === 'week' || range === 'month' || st.days.length <= 31;
+function buckets(st, range) {
+  if (daily(st, range)) {
+    return st.days.map(x => {
+      const date = new Date(x.d * 864e5);
+      return { ...x, short: st.days.length <= 7 ? date.toLocaleDateString(undefined, { weekday: 'narrow', timeZone: 'UTC' }) : String(date.getUTCDate()),
+        long: date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) };
+    });
+  }
+  const map = new Map();
+  for (const x of st.days) {
+    const k = x.key.slice(0, 7);
+    if (!map.has(k)) {
+      const date = new Date(x.d * 864e5);
+      map.set(k, { done: 0, possible: 0, short: date.toLocaleDateString(undefined, { month: 'narrow', timeZone: 'UTC' }),
+        long: date.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' }) });
+    }
+    const b = map.get(k); b.done += x.done; b.possible += x.possible;
+  }
+  return [...map.values()];
+}
+
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+
+function barChart(id, items, labelEvery) {
+  return `<div class="chart" id="${id}">
+    <div class="readout" aria-live="polite">Tap a bar for details</div>
+    <div class="plot">
+      <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
+      <div class="bars">${items.map((b, i) => `
+        <button class="bar" data-tip="${esc(b.long)}: ${b.possible ? `${pct(b.done, b.possible)}% (${b.done} of ${b.possible})` : 'nothing to do yet'}">
+          <span class="fill${b.possible ? '' : ' none'}" style="height:${b.possible ? Math.max(2, pct(b.done, b.possible)) : 0}%"></span>
+          <span class="tick">${i % labelEvery === 0 ? esc(b.short) : ''}</span>
+        </button>`).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function openStats() {
+  const view = $('stats');
+  const draw = () => {
+    const habits = state.habits;
+    if (!habits.length) {
+      view.innerHTML = `<div class="stats-in"><div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
+        <p class="stats-empty">Add a habit to see your stats.</p></div>`;
+      $('stats-close').onclick = closeStats;
+      return;
+    }
+    const one = habits.find(h => h.id === statsView.habit);
+    if (!one) statsView.habit = 'all';
+    const sel = one ? [one] : habits;
+    const st = computeStats(sel, statsView.range);
+    const rate = pct(st.done, st.possible);
+    const rangeName = RANGES.find(r => r[0] === statsView.range)[3];
+
+    let tiles;
+    if (one) {
+      tiles = [
+        ['Completions', `${st.done}<small> of ${st.possible} days</small>`],
+        ['Current streak', `${streak(one)}<small> days</small>`],
+        ['Longest streak', `${longestStreak(one)}<small> days</small>`],
+        ['All-time total', `${one.done.length}<small> times</small>`],
+      ];
+    } else {
+      const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
+      tiles = [
+        ['Completions', `${st.done}<small> of ${st.possible}</small>`],
+        ['Best streak', `${best[0]}<small> days</small><em>${best[0] ? esc((best[1].emoji ? best[1].emoji + ' ' : '') + best[1].name) : '&nbsp;'}</em>`],
+        ['Perfect days', `${st.perfect}<small> all done</small>`],
+        ['Habits', `${habits.length}<small> tracked</small>`],
+      ];
+    }
+
+    const b = buckets(st, statsView.range);
+    const every = b.length <= 12 ? 1 : b.length <= 31 ? 5 : Math.ceil(b.length / 8);
+    const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const wd = st.weekday.map((w, i) => ({ ...w, short: names[i][0], long: names[i] }));
+    const ranked = wd.filter(w => w.possible).sort((a, c) => pct(c.done, c.possible) - pct(a.done, a.possible));
+    const wdNote = ranked.length > 1
+      ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
+      : 'Keep going to see which days work best.';
+
+    view.innerHTML = `<div class="stats-in">
+      <div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
+      <div class="pick">
+        <button class="pchip${one ? '' : ' sel'}" data-h="all">All habits</button>
+        ${habits.map(h => `<button class="pchip${one === h ? ' sel' : ''}" data-h="${h.id}">${h.emoji ? esc(h.emoji) + ' ' : ''}${esc(h.name)}</button>`).join('')}
+      </div>
+      <div class="seg">${RANGES.map(([k, label]) => `<button class="${statsView.range === k ? 'sel' : ''}" data-r="${k}">${label}</button>`).join('')}</div>
+      <div class="hero">
+        <div class="hero-n">${rate}<span>%</span></div>
+        <div class="hero-t">completion rate, ${rangeName}<br><b>${st.done} of ${st.possible}</b> ${one ? 'days done' : 'check-offs done'}</div>
+      </div>
+      <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><div class="tk">${k}</div><div class="tv">${v}</div></div>`).join('')}</div>
+      <h3>${daily(st, statsView.range) ? 'Each day' : 'Each month'}</h3>
+      ${barChart('trend', b, every)}
+      <h3>By day of the week</h3>
+      ${barChart('weekdays', wd, 1)}
+      <p class="note">${wdNote}</p>
+    </div>`;
+    $('stats-close').onclick = closeStats;
+    view.querySelectorAll('.pchip').forEach(x => x.onclick = () => { statsView.habit = x.dataset.h; draw(); });
+    view.querySelectorAll('.seg button').forEach(x => x.onclick = () => { statsView.range = x.dataset.r; draw(); });
+    view.querySelectorAll('.chart').forEach(chart => {
+      const out = chart.querySelector('.readout');
+      chart.querySelectorAll('.bar').forEach(bar => {
+        const show = () => {
+          chart.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on'));
+          bar.classList.add('on');
+          out.textContent = bar.dataset.tip;
+        };
+        bar.onclick = show;
+        bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
+      });
+    });
+    const sc = view.querySelector('.pick .sel');
+    if (sc) sc.scrollIntoView({ block: 'nearest', inline: 'center' });
+  };
+  draw();
+  view.hidden = false;
+  view.scrollTop = 0;
+}
+function closeStats() { $('stats').hidden = true; }
+$('stats-btn').onclick = openStats;
 
 function exportData() {
   const a = document.createElement('a');

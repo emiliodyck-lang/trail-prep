@@ -10,7 +10,13 @@
 - **Small + in the top right** opens "New habit": a name, then optionally a unit and daily goal ("Drink water · 2 L"). Known words suggest units as you type ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…). "Other unit…" handles anything else, "No unit" skips it.
 - **Optional emoji per habit.** The New habit sheet suggests emojis from the name ("water" → 💧🥤🚰🧊, "guitar" → 🎸🎶; generic ⭐✅🎯 when nothing matches), and you can type your own or pick None. Holding a circle lets you change it later. 
 - **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
-- **Search bar at the bottom** filters the circles by name.
+- **📊 Stats button at the bottom** (replaced the search bar) opens a full stats screen:
+  - Pick **All habits** or any single habit, and a range: **Week / Month / Year / All time** (last 7 / 30 / 365 days, or since the first habit).
+  - **Completion rate** = check-offs done ÷ check-offs possible. 2 habits × 10 days = 20 possible; missing 2 = 18 of 20 = 90%. A habit only counts from the day it was created (or its earliest backfilled day). **Today only counts once it's done**, so the rate doesn't drop every morning.
+  - All habits: completions, best streak (and which habit), perfect days (everything done), habits tracked.
+  - One habit: "9 of 10 days", current streak, longest streak, all-time total.
+  - **Bar chart** of the rate per day (per month for year / all time with more than a month of history). Tap a bar for the exact numbers.
+  - **By day of the week** chart plus "Best on Mondays, weakest on Fridays", to show where you slip.
 - **Hold a circle** to open its menu: tap the name at the top to rename it, see the streak, swipe through a day strip (today on the right, up to a year back, month labels on the 1st) and tap any day to fix it, change the emoji, or delete it.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
 - **All inputs use 16px text** so iPhones don't auto-zoom the page.
@@ -23,7 +29,7 @@
 | Reminders / push | Web push is flaky on iOS. Build this in the native version. |
 | Gamification (points, badges, levels) | Works for a week, then gets annoying. The streak is enough. |
 | Categories, icons, picking colors | Setup busywork people do once and then abandon the app. Colors are assigned automatically. |
-| Charts / analytics | Nobody opens them after the first week. The 7-day strip covers 90% of it. |
+| Heavy analytics (trends, correlations, exports to charts) | The stats screen covers what's actionable; more is noise. |
 
 ## Data model
 ```json
