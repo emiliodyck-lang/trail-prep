@@ -65,8 +65,10 @@
   .dots span.on { background:rgb(var(--fg)); width:18px; border-radius:4px; }
 
   input { width:100%; min-width:0; font:inherit; font-size:16px; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); }
-  .bottom { display:flex; justify-content:center; padding:8px 16px calc(12px + env(safe-area-inset-bottom)); }
-  .pill { font:inherit; font-weight:700; color:rgb(var(--fg)); background:rgba(var(--fg),.22); border:0; border-radius:999px; padding:12px 22px; cursor:pointer; }
+  .bottom { display:flex; justify-content:flex-end; padding:8px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .pill { display:flex; align-items:center; gap:8px; font:inherit; font-weight:700; color:rgb(var(--fg)); background:rgba(var(--fg),.22); border:0; border-radius:999px; padding:11px 18px 11px 14px; cursor:pointer; }
+  .pill svg { width:22px; height:22px; }
+  .round svg { width:22px; height:22px; display:block; margin:auto; }
 
   /* Stats: its own full screen over the same gradient. */
   #stats { position:fixed; inset:0; z-index:5; overflow-y:auto; color:rgb(var(--fg)); background:inherit; background-attachment:fixed;
@@ -190,17 +192,17 @@
 <div class="app">
   <header>
     <div><h1 id="today">Today</h1><p class="sub" id="progress"></p></div>
-    <button class="round" id="theme" aria-label="Change colors">🎨</button>
+    <button class="round" id="theme" aria-label="Change colors"></button>
     <button class="round" id="add" aria-label="Add habit">+</button>
   </header>
   <div class="pages" id="pages"></div>
   <div class="dots" id="dots"></div>
-  <div class="bottom"><button class="pill" id="stats-btn">📊 Stats</button></div>
+  <div class="bottom"><button class="pill" id="stats-btn"><span>Stats</span></button></div>
 </div>
 <input type="file" id="file" accept="application/json" hidden>
 <div id="stats" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="icons.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

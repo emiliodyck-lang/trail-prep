@@ -327,7 +327,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 18</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 19</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
@@ -742,6 +742,9 @@ function drawBody() {
 }
 function closeStats() { $('stats').hidden = true; }
 $('stats-btn').onclick = openStats;
+// Toolbar icons use the same one-color set as the habits, so they follow the theme's text color.
+$('stats-btn').insertAdjacentHTML('afterbegin', iconSvg('chart-line-up'));
+$('theme').innerHTML = iconSvg('palette');
 
 function exportData() {
   const a = document.createElement('a');
