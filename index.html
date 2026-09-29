@@ -144,8 +144,11 @@
   .duo { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .duo > div { min-width:0; }
   .duo .readout { min-height:34px; font-size:12px; }
-  .duo .plot, .duo .lplot { height:120px; }
-  .duo .plot { padding-left:28px; }
+  /* Line up the two charts: the bar chart's 18px tick row sits inside its 120px plot, so the line chart
+     gets a 102px plot plus an 18px label row. Same baseline, same total height. */
+  .duo .plot { height:120px; padding-left:28px; }
+  .duo .lplot { height:102px; }
+  .duo .xlabels { height:18px; margin-top:0; align-items:flex-end; font-size:10px; line-height:1; }
   .duo .note { font-size:12px; }
 
   .bars { position:relative; height:100%; display:flex; gap:2px; align-items:stretch; }
@@ -274,7 +277,7 @@
 <div id="stats" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="icons.js?v=24"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
