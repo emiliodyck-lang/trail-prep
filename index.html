@@ -126,6 +126,14 @@
   .xhair { position:absolute; top:0; bottom:0; width:0; border-left:1px dashed rgba(var(--fg),.7); pointer-events:none; }
   .xdot { position:absolute; width:10px; height:10px; margin:-5px 0 0 -5px; border-radius:50%; background:rgb(var(--fg)); box-shadow:0 0 0 3px rgba(var(--fg),.35); pointer-events:none; }
   .xlabels { display:flex; justify-content:space-between; padding-left:34px; font-size:11px; opacity:.8; margin-top:6px; }
+  .noy .lplot, .noy .xlabels { padding-left:0; }
+  /* Day-of-week bars and time-of-day line side by side. */
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .duo > div { min-width:0; }
+  .duo .readout { min-height:34px; font-size:12px; }
+  .duo .plot, .duo .lplot { height:120px; }
+  .duo .plot { padding-left:28px; }
+  .duo .note { font-size:12px; }
 
   .bars { position:relative; height:100%; display:flex; gap:2px; align-items:stretch; }
   .bar { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:flex-end; border:0; background:none; padding:0 0 18px; cursor:pointer; position:relative; }
@@ -192,7 +200,7 @@
 <input type="file" id="file" accept="application/json" hidden>
 <div id="stats" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=17"></script>
-<script src="app.js?v=17"></script>
+<script src="icons.js?v=18"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

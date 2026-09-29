@@ -208,9 +208,17 @@ function save() {
   render();
 }
 
+// Checking off today also records the time (minutes after midnight) for the time-of-day chart.
+// Backfilled days have no time: we don't know when they happened.
 function toggle(h, date) {
   const i = h.done.indexOf(date);
-  if (i === -1) h.done.push(date); else h.done.splice(i, 1);
+  if (i === -1) {
+    h.done.push(date);
+    if (date === ymd(daysAgo(0))) { const now = new Date(); (h.times = h.times || {})[date] = now.getHours() * 60 + now.getMinutes(); }
+  } else {
+    h.done.splice(i, 1);
+    if (h.times) delete h.times[date];
+  }
   if (navigator.vibrate) navigator.vibrate(10);
   save();
 }
@@ -319,7 +327,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 17</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 18</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
@@ -497,7 +505,7 @@ function computeStats(habits, range) {
   const today = dayNum(ymd(daysAgo(0)));
   const earliest = Math.min(...habits.map(startOf));
   const len = RANGES.find(r => r[0] === range)[2];
-  const from = len ? today - len + 1 : earliest;
+  const from = len ? Math.max(today - len + 1, earliest) : earliest;
   const days = [];
   let done = 0, possible = 0, perfect = 0;
   const weekday = Array.from({ length: 7 }, () => ({ done: 0, possible: 0 }));
@@ -535,7 +543,7 @@ function trendPoints(st, range) {
   });
 }
 
-function lineChart(points, first, last) {
+function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
   const W = 300, H = 120, n = points.length;
   const x = i => n === 1 ? W / 2 : i / (n - 1) * W, y = v => H - v / 100 * H;
   let line = '', pen = false;
@@ -549,20 +557,21 @@ function lineChart(points, first, last) {
   if (cur.length) segs.push(cur);
   const area = segs.map(sg => `M${x(sg[0]).toFixed(1)},${H}` + sg.map(i => `L${x(i).toFixed(1)},${y(points[i].v).toFixed(1)}`).join('') + `L${x(sg[sg.length - 1]).toFixed(1)},${H}Z`).join('');
   const lastI = points.map(p => p.v != null).lastIndexOf(true);
-  return `<div class="lchart">
+  const gid = 'lg' + (++lineChart.n || (lineChart.n = 1));
+  return `<div class="lchart${yLabels.some(Boolean) ? '' : ' noy'}">
     <div class="readout" aria-live="polite">${lastI >= 0 ? esc(points[lastI].tip) : 'No data yet'}</div>
     <div class="lplot">
-      <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
+      <div class="grid">${yLabels.map(l => `<span>${l}</span>`).join('')}</div>
       <div class="lsvg">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-          <path d="${area}" fill="url(#lg)"/>
+          <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+          <path d="${area}" fill="url(#${gid})"/>
           <path d="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
         </svg>
         <span class="xhair" hidden></span><span class="xdot" hidden></span>
       </div>
     </div>
-    <div class="xlabels"><span>${esc(first)}</span><span>${esc(last)}</span></div>
+    <div class="xlabels">${xLabels.map(l => `<span>${esc(l)}</span>`).join('')}</div>
   </div>`;
 }
 
@@ -582,6 +591,25 @@ function bindLineChart(root, points) {
   };
   box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); at(e); });
   box.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || box.hasPointerCapture(e.pointerId)) at(e); });
+}
+
+// Check-offs per hour across the selected habits and range, smoothed over 3 hours (wrapping at midnight).
+const hourName = h => `${h % 12 || 12} ${h % 24 < 12 ? 'AM' : 'PM'}`;
+function timeOfDay(habits, from) {
+  const counts = Array(24).fill(0);
+  let total = 0;
+  for (const h of habits) for (const [key, min] of Object.entries(h.times || {})) {
+    if (dayNum(key) < from || !h.done.includes(key)) continue;
+    counts[Math.floor(min / 60) % 24]++; total++;
+  }
+  const smooth = counts.map((_, i) => (counts[(i + 23) % 24] + 2 * counts[i] + counts[(i + 1) % 24]) / 4);
+  const max = Math.max(...smooth);
+  const points = Array.from({ length: 25 }, (_, i) => {
+    const hr = i % 24;
+    return { v: total ? smooth[hr] / max * 100 : null, tip: `${hourName(hr)}–${hourName(hr + 1)}: ${counts[hr]} check-off${counts[hr] === 1 ? '' : 's'}` };
+  });
+  const peak = counts.indexOf(Math.max(...counts));
+  return { points, total, peak };
 }
 
 function barChart(items) {
@@ -685,18 +713,26 @@ function drawBody() {
     ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
     : 'Keep going to see which days work best.';
 
+  const tod = timeOfDay(one ? [one] : habits, st.from);
+  const todNote = tod.total
+    ? `Usually around <b>${hourName(tod.peak)}</b> · ${tod.total} timed check-off${tod.total === 1 ? '' : 's'}.`
+    : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
+
   const body = $('stats-body');
   body.innerHTML = `
     <p class="range-note">${range[3][0].toUpperCase() + range[3].slice(1)}</p>
     <div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>
     <hr class="sep">
     <h3>${statsView.range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
-    ${lineChart(pts, first, last)}
+    ${lineChart(pts, [first, last])}
     <hr class="sep">
-    <h3>By day of the week</h3>
-    ${barChart(wd)}
-    <p class="note">${wdNote}</p>`;
+    <div class="duo">
+      <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${wdNote}</p></div>
+      <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${todNote}</p></div>
+    </div>`;
   bindLineChart(body.querySelector('.lchart'), pts);
+  bindLineChart($('tod').querySelector('.lchart'), tod.points);
+  $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times yet';
   const bc = body.querySelector('.bchart'), out = bc.querySelector('.readout');
   bc.querySelectorAll('.bar').forEach(bar => {
     const show = () => { bc.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on')); bar.classList.add('on'); out.textContent = bar.dataset.tip; };

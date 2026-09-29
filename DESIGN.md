@@ -16,6 +16,8 @@
   - **Completion rate** = check-offs done ÷ check-offs possible. 2 habits × 10 days = 20 possible; missing 2 = 18 of 20 = 90%. A habit only counts from the day it was created (or its earliest backfilled day). **Today only counts once it's done**, so the rate doesn't drop every morning.
   - Plain big numbers, no boxes. All habits: completion %, check-offs (done/possible), best streak (and which habit). One habit: completion %, days done, all-time total, current streak, longest streak.
   - **Trend line** (stock-chart style, area underneath): each point is the 7-day rolling rate (the week view shows each day). Drag a finger across it to read any day.
+  - The chart always starts at the left edge: the range begins at the first day any selected habit existed, and the left label shows that date.
+  - **Time of day** line (next to the weekday bars): check-offs per hour, smoothed over 3 hours. Times are recorded when you tap a circle for today (`times: { "YYYY-MM-DD": minutesAfterMidnight }`); backfilled days have no time.
   - **By day of the week** chart plus "Best on Mondays, weakest on Fridays", to show where you slip.
 - **Hold a circle** to open its menu: tap the name at the top to rename it, see the streak, swipe through a day strip (today on the right, up to a year back, month labels on the 1st) and tap any day to fix it, change the emoji, or delete it.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
