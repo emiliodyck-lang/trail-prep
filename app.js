@@ -663,29 +663,94 @@ function openEditSheet(h) {
 // Today only counts once it's done, so the rate doesn't drop every morning.
 const longestStreak = h => streaks(h).best;
 const RANGES = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
-// offset = how many periods back from the current one (0 = today / this week / this month / this year).
-const statsView = { habit: 'all', range: 'month', offset: 0 };
+// anchor = the picked date (a day number); the period shown is the day / week / month / year containing it.
+const statsView = { habit: 'all', range: 'month', anchor: null };
+const yearOf = n => new Date(n * 864e5).getUTCFullYear();
+const monthOf = n => new Date(n * 864e5).getUTCMonth();
+const dateOf = n => new Date(n * 864e5).getUTCDate();
 
-// The calendar period `offset` steps back: { from, to (may be past today), label, sub }. Weeks start on Monday.
-function period(range, offset, earliest) {
+// { from, to (may be past today), label, sub } for the period containing `anchor`. Weeks start on Monday.
+function period(range, anchor, earliest) {
   const t = todayNum(), md = { month: 'short', day: 'numeric' };
   if (range === 'day') {
-    const d = t - offset;
-    return { from: d, to: d, label: offset === 0 ? 'Today' : offset === 1 ? 'Yesterday' : fmtDay(d, { weekday: 'long' }),
-      sub: fmtDay(d, { month: 'long', day: 'numeric', year: 'numeric' }) };
+    return { from: anchor, to: anchor, label: anchor === t ? 'Today' : anchor === t - 1 ? 'Yesterday' : fmtDay(anchor, { weekday: 'long' }),
+      sub: fmtDay(anchor, { month: 'long', day: 'numeric', year: 'numeric' }) };
   }
   if (range === 'week') {
-    const f = weekStart(t) - 7 * offset;
-    return { from: f, to: f + 6, label: offset === 0 ? 'This week' : offset === 1 ? 'Last week' : `Week of ${fmtDay(f, md)}`,
-      sub: `${fmtDay(f, md)} – ${fmtDay(f + 6, md)}` };
+    const f = weekStart(anchor), cur = weekStart(t);
+    return { from: f, to: f + 6, label: f === cur ? 'This week' : f === cur - 7 ? 'Last week' : `Week of ${fmtDay(f, md)}`,
+      sub: `${fmtDay(f, md)} – ${fmtDay(f + 6, { ...md, year: 'numeric' })}` };
   }
-  const now = new Date(t * 864e5), y = now.getUTCFullYear();
+  const y = yearOf(anchor), m = monthOf(anchor);
   if (range === 'month') {
-    const f = Date.UTC(y, now.getUTCMonth() - offset, 1) / 864e5, l = Date.UTC(y, now.getUTCMonth() - offset + 1, 0) / 864e5;
-    return { from: f, to: l, label: fmtDay(f, { month: 'long' }), sub: fmtDay(f, { year: 'numeric' }) };
+    const f = Date.UTC(y, m, 1) / 864e5, l = Date.UTC(y, m + 1, 0) / 864e5;
+    return { from: f, to: l, label: fmtDay(f, { month: 'long' }), sub: String(y) };
   }
-  if (range === 'year') return { from: Date.UTC(y - offset, 0, 1) / 864e5, to: Date.UTC(y - offset, 11, 31) / 864e5, label: String(y - offset), sub: '' };
+  if (range === 'year') return { from: Date.UTC(y, 0, 1) / 864e5, to: Date.UTC(y, 11, 31) / 864e5, label: String(y), sub: '' };
   return { from: earliest, to: t, label: 'All time', sub: `Since ${fmtDay(earliest, { month: 'short', day: 'numeric', year: 'numeric' })}` };
+}
+
+// Tapping the period title: pick a year, a month (year chips + month grid), or a day / week from
+// scrollable month calendars. Only dates from the first habit up to today can be picked.
+function openPeriodPicker(range, earliest) {
+  const t = todayNum(), a = statsView.anchor;
+  const years = []; for (let y = yearOf(t); y >= yearOf(earliest); y--) years.push(y);
+  const pick = n => { statsView.anchor = Math.min(t, n); closeSheet(); drawBody(); };
+  const monthLen = (y, m) => dateOf(Date.UTC(y, m + 1, 0) / 864e5);
+
+  if (range === 'year') {
+    openSheet(`<h2>Pick a year</h2><div class="chips">${years.map(y =>
+      `<button class="chip${y === yearOf(a) ? ' sel' : ''}" data-y="${y}">${y}</button>`).join('')}</div>`, panel => {
+      panel.querySelectorAll('[data-y]').forEach(b => b.onclick = () => {
+        const y = +b.dataset.y;
+        pick(Date.UTC(y, monthOf(a), Math.min(dateOf(a), monthLen(y, monthOf(a)))) / 864e5);
+      });
+    });
+    return;
+  }
+
+  if (range === 'month') {
+    let yy = yearOf(a);
+    const draw = () => openSheet(`
+      <h2>Pick a month</h2>
+      <div class="chips">${years.map(y => `<button class="chip${y === yy ? ' sel' : ''}" data-y="${y}">${y}</button>`).join('')}</div>
+      <div class="mgrid">${Array.from({ length: 12 }, (_, m) => {
+        const f = Date.UTC(yy, m, 1) / 864e5, l = Date.UTC(yy, m + 1, 0) / 864e5;
+        const ok = f <= t && l >= earliest, sel = yy === yearOf(a) && m === monthOf(a);
+        return `<button class="mcell${sel ? ' sel' : ''}" data-m="${m}"${ok ? '' : ' disabled'}>${fmtDay(f, { month: 'short' })}</button>`;
+      }).join('')}</div>`, panel => {
+      panel.querySelectorAll('[data-y]').forEach(b => b.onclick = () => { yy = +b.dataset.y; draw(); });
+      panel.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+        const m = +b.dataset.m;
+        pick(Math.max(earliest, Date.UTC(yy, m, Math.min(dateOf(a), monthLen(yy, m))) / 864e5));
+      });
+    });
+    draw();
+    return;
+  }
+
+  // Day or week: every month from the first habit to now, oldest at the top; opens on the picked month.
+  const months = [];
+  for (let y = yearOf(earliest), m = monthOf(earliest); Date.UTC(y, m, 1) / 864e5 <= t; m++) {
+    if (m > 11) { m = 0; y++; }
+    months.push([y, m]);
+  }
+  const isSel = d => range === 'week' ? weekStart(d) === weekStart(a) : d === a;
+  openSheet(`
+    <h2>${range === 'week' ? 'Pick a week' : 'Pick a day'}</h2>
+    <div class="pcal-wrap">${months.map(([y, m]) => {
+      const f = Date.UTC(y, m, 1) / 864e5, n = monthLen(y, m);
+      const cells = Array.from({ length: weekdayOf(f) }, () => '<span></span>').concat(Array.from({ length: n }, (_, i) => {
+        const d = f + i, ok = d >= earliest && d <= t;
+        return `<button class="pd${isSel(d) ? ' sel' : ''}${d === t ? ' today' : ''}" data-d="${d}"${ok ? '' : ' disabled'}>${i + 1}</button>`;
+      }));
+      return `<div class="pm${y === yearOf(a) && m === monthOf(a) ? ' here' : ''}"><h4>${fmtDay(f, { month: 'long', year: 'numeric' })}</h4>
+        <div class="pgrid">${DAY_LETTERS.map(l => `<i>${l}</i>`).join('')}${cells.join('')}</div></div>`;
+    }).join('')}</div>`, panel => {
+    panel.querySelectorAll('[data-d]').forEach(b => b.onclick = () => pick(+b.dataset.d));
+    const here = panel.querySelector('.pm.here');
+    if (here) panel.scrollTop = here.offsetTop - 60;
+  });
 }
 
 // Per day, how many check-offs were expected ("possible") and made ("done") across the habits.
@@ -880,7 +945,7 @@ function openStats() {
     if (id && id !== statsView.habit) { statsView.habit = id; drawBody(); }
   }, { passive: true });
 
-  $('range').onchange = e => { statsView.range = e.target.value; statsView.offset = 0; drawBody(); };
+  $('range').onchange = e => { statsView.range = e.target.value; drawBody(); };
   $('stats-close').onclick = closeStats;
   drawBody();
 }
@@ -939,15 +1004,14 @@ function drawBody() {
   const sel = one ? [one] : habits;
   const earliest = Math.min(...sel.map(startOf)), today = todayNum();
   const range = statsView.range;
-  const p = period(range, statsView.offset, earliest);
+  if (statsView.anchor == null || statsView.anchor > today) statsView.anchor = today;
+  if (statsView.anchor < earliest) statsView.anchor = earliest;
+  const p = period(range, statsView.anchor, earliest);
   const st = computeStats(sel, p.from, p.to);
-  const canBack = range !== 'all' && p.from > earliest, canFwd = range !== 'all' && statsView.offset > 0;
 
-  const nav = `<div class="pnav">
-      <button class="round pbtn" id="p-prev" aria-label="Previous"${canBack ? '' : ' disabled'}>‹</button>
-      <div class="ptitle"><b>${esc(p.label)}</b>${p.sub ? `<small>${esc(p.sub)}</small>` : ''}</div>
-      <button class="round pbtn" id="p-next" aria-label="Next"${canFwd ? '' : ' disabled'}>›</button>
-    </div>`;
+  const nav = range === 'all'
+    ? `<div class="pnav"><div class="ptitle"><b>${esc(p.label)}</b><small>${esc(p.sub)}</small></div></div>`
+    : `<div class="pnav"><button class="ptitle tap" id="p-pick" aria-label="Choose ${range}"><b>${esc(p.label)} <span class="caret">▾</span></b>${p.sub ? `<small>${esc(p.sub)}</small>` : ''}</button></div>`;
 
   const wk = h => sched(h).type === 'weekly' ? '<small> wk</small>' : '';
   // A single day counts everything that was due that day, today included ("0 of 3 done" beats "0 of 0").
@@ -974,9 +1038,40 @@ function drawBody() {
   const numsHTML = `<div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>`;
 
   const body = $('stats-body');
+  const bindBars = () => {
+    const bc = body.querySelector('.bchart'), out = bc.querySelector('.readout');
+    bc.querySelectorAll('.bar').forEach(bar => {
+      const show = () => { bc.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on')); bar.classList.add('on'); out.textContent = bar.dataset.tip; };
+      bar.onclick = show;
+      bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
+    });
+    return bc;
+  };
+  const todNoteFor = tod => tod.total
+    ? `Usually around <b>${hourName(tod.peak)}</b> · ${tod.total} timed check-off${tod.total === 1 ? '' : 's'}.`
+    : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
+  const bindPick = () => { const b = $('p-pick'); if (b) b.onclick = () => openPeriodPicker(range, earliest); };
+
   if (range === 'day') {
-    body.innerHTML = `${nav}${numsHTML}<hr class="sep"><h3>${one ? 'That day' : 'Your habits that day'}</h3>${dayList(p.from, sel)}`;
-    bindNav();
+    // The day's habits, plus that week's days as bars (this day highlighted) and that day's check-off times.
+    const ws = weekStart(p.from), wkSt = computeStats(sel, ws, ws + 6);
+    const byDay = new Map(wkSt.days.map(x => [x.d, x]));
+    const bars = Array.from({ length: 7 }, (_, i) => {
+      const x = byDay.get(ws + i) || { done: 0, possible: 0 };
+      return { ...x, short: DAY_LETTERS[i], long: fmtDay(ws + i, { weekday: 'short', month: 'short', day: 'numeric' }) };
+    });
+    const tod = timeOfDay(sel, p.from, p.from);
+    body.innerHTML = `${nav}${numsHTML}<hr class="sep"><h3>${one ? 'That day' : 'Your habits that day'}</h3>${dayList(p.from, sel)}
+      <hr class="sep">
+      <div class="duo">
+        <div><h3>That week</h3>${barChart(bars)}<p class="note">${fmtDay(ws, { month: 'short', day: 'numeric' })} – ${fmtDay(ws + 6, { month: 'short', day: 'numeric' })}</p></div>
+        <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${tod.total ? `Around <b>${hourName(tod.peak)}</b> that day.` : 'No check-off times saved for this day.'}</p></div>
+      </div>`;
+    bindPick();
+    const bc = bindBars(), mine = bc.querySelectorAll('.bar')[weekdayOf(p.from)];
+    mine.classList.add('on'); bc.querySelector('.readout').textContent = mine.dataset.tip;
+    bindLineChart($('tod').querySelector('.lchart'), tod.points);
+    $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times that day';
     return;
   }
 
@@ -994,9 +1089,7 @@ function drawBody() {
     : 'Keep going to see which days work best.';
 
   const tod = timeOfDay(sel, st.from, st.to);
-  const todNote = tod.total
-    ? `Usually around <b>${hourName(tod.peak)}</b> · ${tod.total} timed check-off${tod.total === 1 ? '' : 's'}.`
-    : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
+  const todNote = todNoteFor(tod);
 
   body.innerHTML = `
     ${nav}
@@ -1010,20 +1103,11 @@ function drawBody() {
       <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${wdNote}</p></div>
       <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${todNote}</p></div>
     </div>`;
-  bindNav();
+  bindPick();
   if (pts.length) bindLineChart(body.querySelector('.lchart'), pts);
   bindLineChart($('tod').querySelector('.lchart'), tod.points);
   $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times yet';
-  const bc = body.querySelector('.bchart'), out = bc.querySelector('.readout');
-  bc.querySelectorAll('.bar').forEach(bar => {
-    const show = () => { bc.querySelectorAll('.bar.on').forEach(o => o.classList.remove('on')); bar.classList.add('on'); out.textContent = bar.dataset.tip; };
-    bar.onclick = show;
-    bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
-  });
-}
-function bindNav() {
-  $('p-prev').onclick = () => { statsView.offset++; drawBody(); };
-  $('p-next').onclick = () => { statsView.offset = Math.max(0, statsView.offset - 1); drawBody(); };
+  bindBars();
 }
 function closeStats() { hideAnimated($('stats')); }
 $('stats-btn').onclick = openStats;
@@ -1128,7 +1212,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 25</div>
+      <div class="links">Version 26</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);

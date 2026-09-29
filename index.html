@@ -118,13 +118,28 @@
   @media (prefers-reduced-motion: reduce) { .minis.drift .track { animation:none; } }
   .sdots { margin-top:2px; }
 
-  /* ‹ September 2026 › */
-  .pnav { display:flex; align-items:center; justify-content:space-between; margin:-4px 0 14px; }
-  .pbtn { width:38px; height:38px; font-size:26px; line-height:34px; }
-  .pbtn:disabled { opacity:.25; }
-  .ptitle { text-align:center; }
+  /* Period title: tap to pick a day / week / month / year */
+  .pnav { display:flex; justify-content:center; margin:-4px 0 14px; }
+  .ptitle { text-align:center; font:inherit; color:inherit; background:none; border:0; padding:6px 16px; border-radius:14px; }
+  .ptitle.tap { background:rgba(var(--fg),.15); cursor:pointer; transition:transform .12s; }
+  .ptitle.tap:active { transform:scale(.96); }
   .ptitle b { display:block; font-size:18px; }
+  .ptitle .caret { font-size:13px; opacity:.8; }
   .ptitle small { font-size:12px; opacity:.8; }
+
+  /* Pickers (in the bottom sheet) */
+  .mgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .mcell { font:inherit; font-weight:600; padding:14px 0; border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
+  .mcell.sel { background:var(--text); color:var(--bg); border-color:var(--text); }
+  .mcell:disabled { opacity:.3; cursor:default; }
+  .pm { margin-bottom:18px; }
+  .pm h4 { margin:0 0 8px; font-size:15px; }
+  .pgrid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+  .pgrid i { font-style:normal; text-align:center; font-size:11px; font-weight:700; color:var(--muted); }
+  .pd { font:inherit; font-size:14px; aspect-ratio:1; border:0; border-radius:50%; background:none; color:var(--text); cursor:pointer; padding:0; }
+  .pd.today { box-shadow:inset 0 0 0 1.5px var(--text); }
+  .pd.sel { background:var(--text); color:var(--bg); font-weight:700; }
+  .pd:disabled { opacity:.25; cursor:default; }
 
   /* Month calendar */
   .cal { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
@@ -311,7 +326,7 @@
 <div id="stats" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="icons.js?v=26"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>
