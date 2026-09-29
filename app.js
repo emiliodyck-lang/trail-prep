@@ -230,7 +230,7 @@ function toggle(h, date) {
 // A day counts as done (is in h.done) once its total reaches the goal, so streaks and stats work as usual.
 const isAmount = h => h.track === 'amount' && !!h.unit && h.goal > 0;
 const amountOn = (h, key) => (h.amounts && h.amounts[key]) || 0;
-const UNIT_STEPS = { L: 0.25, ml: 250, oz: 8, glasses: 1, cups: 1, km: 0.5, mi: 0.5, steps: 1000, pages: 5, minutes: 5, min: 5, hours: 0.5, reps: 10 };
+const UNIT_STEPS = { times: 1, L: 0.25, ml: 250, oz: 8, glasses: 1, cups: 1, km: 0.5, mi: 0.5, steps: 1000, pages: 5, minutes: 5, min: 5, hours: 0.5, reps: 10 };
 // Quick-add size: the unit's usual step, or a round number that takes about 4 taps to reach the goal.
 function stepFor(h) {
   const known = UNIT_STEPS[h.unit];
@@ -547,10 +547,14 @@ function openAddSheet() {
   const unitsFor = n => (PRESETS.find(p => p.match.test(n)) || { units: [] }).units;
 
   // Only the unit chips and goal field redraw, so the name box keeps focus and the keyboard stays up.
+  // Units to offer: the name's suggestions plus "times", or generic ones when the name isn't recognized.
+  const GENERIC_UNITS = [['times', 3], ['minutes', 30], ['hours', 1]];
+  const offerFor = n => { const u = unitsFor(n); return u.length ? (u.some(x => x[0] === 'times') ? u : [...u, ['times', 3]]) : GENERIC_UNITS; };
   const drawOpts = focusId => {
-    const units = unitsFor(name.value);
+    const units = offerFor(name.value);
     const chip = (mode, label) => `<button class="chip${pick.mode === mode ? ' sel' : ''}" data-mode="${esc(mode)}">${esc(label)}</button>`;
     $('opts').innerHTML = `
+      <div class="field">Unit</div>
       <div class="chips">
         ${chip('none', 'No unit')}
         ${units.map(u => chip(u[0], u[0])).join('')}
@@ -564,17 +568,23 @@ function openAddSheet() {
             ? `<input id="unit" placeholder="unit, e.g. cups" maxlength="12" value="${esc(pick.unit)}">`
             : `<span class="unit">${esc(pick.mode)}</span>`}
         </span>
-      </label>
-      ${trackChips(pick.track)}`}`;
+      </label>`}
+      ${trackChips(pick.track)}`;
     const goal = $('goal'), unit = $('unit');
     if (goal) goal.oninput = () => { pick.goal = goal.value; };
     if (unit) unit.oninput = () => { pick.unit = unit.value; };
-    $('opts').querySelectorAll('[data-track]').forEach(b => b.onclick = () => { pick.track = b.dataset.track; drawOpts(); });
+    $('opts').querySelectorAll('[data-track]').forEach(b => b.onclick = () => {
+      pick.track = b.dataset.track;
+      // Amounts need something to count: with no unit yet, start with "3 times" (editable).
+      if (pick.track === 'amount' && pick.mode === 'none') { pick.auto = false; pick.mode = 'times'; pick.goal = 3; }
+      drawOpts();
+    });
     $('opts').querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
       pick.auto = false;
       pick.mode = b.dataset.mode;
       const u = units.find(u => u[0] === pick.mode);
       pick.goal = u ? u[1] : '';
+      if (pick.mode === 'none') pick.track = 'check';   // nothing to add up without a unit
       drawOpts(pick.mode === 'other' ? 'unit' : !u && pick.mode !== 'none' ? 'goal' : null);
     });
     const f = focusId && $(focusId);
@@ -705,16 +715,36 @@ function openEditSheet(h) {
     });
     drawEmoji();
 
+    // Re-derive which days are done from their totals after the goal changes.
+    const regrade = () => {
+      for (const [k, v] of Object.entries(h.amounts || {})) {
+        const was = h.done.includes(k);
+        if (v >= h.goal && !was) h.done.push(k);
+        if (v < h.goal && was) h.done.splice(h.done.indexOf(k), 1);
+      }
+    };
     const drawTrack = () => {
-      if (!h.unit) return;
-      $('track').innerHTML = trackChips(h.track);
+      $('track').innerHTML = trackChips(h.track) + (isAmount(h) ? `
+        <label class="field">Daily goal
+          <span class="goal"><input id="tg-goal" type="text" inputmode="decimal" autocomplete="off" value="${fmt(h.goal)}">
+          <input id="tg-unit" maxlength="12" autocomplete="off" value="${esc(h.unit)}" aria-label="Unit"></span>
+        </label>` : '');
+      if (isAmount(h)) {
+        $('tg-goal').onchange = e => {
+          const g = parseFloat(e.target.value.replace(',', '.'));
+          if (g > 0) { h.goal = g; regrade(); save(); $('edit-streak').innerHTML = streakText(); }
+          e.target.value = fmt(h.goal);
+        };
+        $('tg-unit').onchange = e => { const u = e.target.value.trim(); if (u) { h.unit = u; save(); $('edit-streak').innerHTML = streakText(); } e.target.value = h.unit; };
+      }
       $('track').querySelectorAll('[data-track]').forEach(b => b.onclick = () => {
         if (b.dataset.track === 'amount') {
+          if (!h.unit) { h.unit = 'times'; h.goal = 3; }   // something to count: "3 times", editable below
           h.track = 'amount';
           const key = ymd(daysAgo(0));   // keep today's state: already done means the goal is already reached
           if (h.done.includes(key)) (h.amounts = h.amounts || {})[key] = Math.max(amountOn(h, key), h.goal);
         } else delete h.track;
-        save(); drawTrack();
+        save(); drawTrack(); $('edit-streak').innerHTML = streakText();
       });
     };
     drawTrack();
@@ -1278,7 +1308,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 33</div>
+      <div class="links">Version 34</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
