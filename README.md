@@ -6,4 +6,4 @@ Run it: `python3 -m http.server 8000` and open http://localhost:8000. On a phone
 
 See [DESIGN.md](DESIGN.md) for what's in it, what's left out on purpose, and why.
 
-Icons: [Phosphor Icons](https://phosphoricons.com) (MIT), see `LICENSE-phosphor.txt`.
+Icons: [Phosphor Icons](https://phosphoricons.com) (MIT, see `LICENSE-phosphor.txt`) and [Material Symbols](https://fonts.google.com/icons) (Apache 2.0, see `LICENSE-material-symbols.txt`).
