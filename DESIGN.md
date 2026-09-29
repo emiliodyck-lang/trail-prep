@@ -20,6 +20,7 @@
   - **Time of day** line (next to the weekday bars): check-offs per hour, smoothed over 3 hours. Times are recorded when you tap a circle for today (`times: { "YYYY-MM-DD": minutesAfterMidnight }`); backfilled days have no time.
   - **By day of the week** chart plus "Best on Mondays, weakest on Fridays", to show where you slip.
 - **Hold a circle** to open its menu: tap the name at the top to rename it, see the streak, swipe through a day strip (today on the right, up to a year back, month labels on the 1st) and tap any day to fix it, change the emoji, or delete it.
+- **Motion:** sheets slide up over a fading backdrop and slide back down; Stats slides in from the right; holding a circle slowly shrinks it toward the long-press, then springs back; buttons squish slightly on tap. All off when the phone's Reduce Motion setting is on.
 - **Offline, no account, no backend.** Data stays on the device (localStorage). Installable PWA. Export/import JSON sits at the bottom of the New habit sheet.
 - **All inputs use 16px text** so iPhones don't auto-zoom the page.
 

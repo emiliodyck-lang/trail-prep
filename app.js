@@ -239,14 +239,17 @@ function el(tag, cls, text) {
 }
 
 // Tap runs onTap; holding ~0.5s without moving runs onHold. Swiping cancels both.
+// While a finger is down the node gets .pressing, so the ring visibly "charges up" toward the hold.
 function pressable(node, onTap, onHold) {
   let timer, sx, sy, held = false;
+  const release = () => { clearTimeout(timer); node.classList.remove('pressing'); };
   node.addEventListener('pointerdown', e => {
     held = false; sx = e.clientX; sy = e.clientY;
-    timer = setTimeout(() => { held = true; if (navigator.vibrate) navigator.vibrate(20); onHold(); }, 500);
+    node.classList.add('pressing');
+    timer = setTimeout(() => { held = true; release(); if (navigator.vibrate) navigator.vibrate(20); onHold(); }, 500);
   });
-  node.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clearTimeout(timer); });
-  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) node.addEventListener(t, () => clearTimeout(timer));
+  node.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - sx, e.clientY - sy) > 10) release(); });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) node.addEventListener(t, release);
   node.addEventListener('click', () => { if (!held) onTap(); });
   node.addEventListener('contextmenu', e => e.preventDefault());
 }
@@ -308,19 +311,35 @@ function updateDots() {
 }
 pagesEl.addEventListener('scroll', updateDots, { passive: true });
 
+// ---- Animated overlays ----
+// Unhide, then add .open once the closed state has rendered so the CSS transition runs;
+// on hide, remove .open and only set hidden after the transition has played.
+const MOTION_MS = 340;
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+function showAnimated(node) {
+  clearTimeout(node.hideTimer);
+  node.hidden = false;
+  node.getBoundingClientRect();
+  node.classList.add('open');
+}
+function hideAnimated(node) {
+  node.classList.remove('open');
+  node.hideTimer = setTimeout(() => { node.hidden = true; }, reducedMotion() ? 0 : MOTION_MS);
+}
+
 // ---- Bottom sheet ----
-function openSheet(html, bind) {
+// peek: a slim bar over an undimmed screen (used by the color picker).
+function openSheet(html, bind, { peek = false } = {}) {
   const sheet = $('sheet');
+  sheet.classList.toggle('peek', peek);
   sheet.querySelector('.panel').innerHTML = html;
-  sheet.hidden = false;
+  showAnimated(sheet);
   bind(sheet.querySelector('.panel'));
 }
 // onSheetClose runs once when the sheet goes away (e.g. to undo a color preview).
 let onSheetClose = null;
 function closeSheet() {
-  const sheet = $('sheet');
-  sheet.hidden = true;
-  sheet.classList.remove('peek');
+  hideAnimated($('sheet'));
   if (onSheetClose) { const f = onSheetClose; onSheetClose = null; f(); }
 }
 $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
@@ -334,7 +353,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 20</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 21</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
@@ -415,7 +434,6 @@ $('add').onclick = openAddSheet;
 // Done keeps the color; Cancel or tapping the screen above goes back to the previous one.
 function openThemeSheet() {
   let pick = themeIndex;
-  $('sheet').classList.add('peek');
   openSheet(`
     <div class="peek-top"><button class="link" id="cancel">Cancel</button><b id="theme-name">${THEMES[pick][0]}</b><button class="link strong" id="close">Done</button></div>
     <div class="themes">${THEMES.map(([n, a, b, c, light], i) =>
@@ -436,7 +454,7 @@ function openThemeSheet() {
       try { localStorage.setItem(THEME_KEY, themeIndex); } catch {}
       closeSheet();
     };
-  });
+  }, { peek: true });
 }
 $('theme').onclick = openThemeSheet;
 
@@ -651,7 +669,7 @@ function openStats() {
     view.innerHTML = `<div class="stats-in"><div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
       <p class="stats-empty">Add a habit to see your stats.</p></div>`;
     $('stats-close').onclick = closeStats;
-    view.hidden = false;
+    showAnimated(view);
     return;
   }
   if (!habits.some(h => h.id === statsView.habit)) statsView.habit = 'all';
@@ -681,7 +699,7 @@ function openStats() {
   const idxOf = () => Math.round(car.scrollLeft / (car.clientWidth || 1));
   const markDots = i => [...$('sdots').children].forEach((d, j) => d.classList.toggle('on', i === j));
   const start = statsView.habit === 'all' ? 0 : habits.findIndex(h => h.id === statsView.habit) + 1;
-  view.hidden = false;
+  showAnimated(view);
   view.scrollTop = 0;
   car.scrollTo({ left: start * car.clientWidth, behavior: 'instant' });
   markDots(start);
@@ -756,7 +774,7 @@ function drawBody() {
     bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
   });
 }
-function closeStats() { $('stats').hidden = true; }
+function closeStats() { hideAnimated($('stats')); }
 $('stats-btn').onclick = openStats;
 // Toolbar icons use the same one-color set as the habits, so they follow the theme's text color.
 $('stats-btn').insertAdjacentHTML('afterbegin', iconSvg('chart-line-up'));
