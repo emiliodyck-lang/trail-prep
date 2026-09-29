@@ -118,20 +118,12 @@
   @media (prefers-reduced-motion: reduce) { .minis.drift .track { animation:none; } }
   .sdots { margin-top:2px; }
 
-  /* Period title: tap to pick a day / week / month / year */
-  .pnav { display:flex; justify-content:center; margin:-4px 0 14px; }
-  .ptitle { text-align:center; font:inherit; color:inherit; background:none; border:0; padding:6px 16px; border-radius:14px; }
-  .ptitle.tap { background:rgba(var(--fg),.15); cursor:pointer; transition:transform .12s; }
-  .ptitle.tap:active { transform:scale(.96); }
-  .ptitle b { display:block; font-size:18px; }
-  .ptitle .caret { font-size:13px; opacity:.8; }
-  .ptitle small { font-size:12px; opacity:.8; }
+  /* Which dates the stats cover */
+  .pnav { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin:-4px 0 14px; }
+  .plabel { font-size:14px; font-weight:600; opacity:.9; text-align:center; }
+  .pnav .pchange { font-size:13px; font-weight:600; padding:6px 12px; color:rgb(var(--fg)); background:rgba(var(--fg),.18); border:0; }
 
   /* Pickers (in the bottom sheet) */
-  .mgrid { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
-  .mcell { font:inherit; font-weight:600; padding:14px 0; border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; }
-  .mcell.sel { background:var(--text); color:var(--bg); border-color:var(--text); }
-  .mcell:disabled { opacity:.3; cursor:default; }
   .pm { margin-bottom:18px; }
   .pm h4 { margin:0 0 8px; font-size:15px; }
   .pgrid { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
@@ -140,6 +132,8 @@
   .pd.today { box-shadow:inset 0 0 0 1.5px var(--text); }
   .pd.sel { background:var(--text); color:var(--bg); font-weight:700; }
   .pd:disabled { opacity:.25; cursor:default; }
+  .pd.inrange { background:color-mix(in srgb, var(--text) 14%, transparent); border-radius:8px; }
+  .actions.sticky { position:sticky; bottom:calc(-20px - env(safe-area-inset-bottom)); background:var(--card); padding:12px 0 calc(8px + env(safe-area-inset-bottom)); margin-bottom:calc(-20px - env(safe-area-inset-bottom)); }
 
   .sep { border:0; border-top:1px solid rgba(var(--fg),.25); margin:16px 0; }
   .range-note { font-size:13px; opacity:.8; margin:0 0 6px; }
@@ -300,7 +294,7 @@
 <div id="stats" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=27"></script>
-<script src="app.js?v=27"></script>
+<script src="icons.js?v=28"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>
