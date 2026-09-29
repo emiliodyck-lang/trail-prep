@@ -537,7 +537,7 @@ function openAddSheet() {
   };
   drawOpts();
   drawEmoji();
-  name.focus();
+  // No auto-focus: on iPhone the keyboard would pop up mid-slide and jolt the sheet. It opens when the name is tapped.
 }
 $('add').onclick = openAddSheet;
 
@@ -1185,7 +1185,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 31</div>
+      <div class="links">Version 32</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
