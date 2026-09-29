@@ -315,7 +315,14 @@ function openSheet(html, bind) {
   sheet.hidden = false;
   bind(sheet.querySelector('.panel'));
 }
-function closeSheet() { $('sheet').hidden = true; }
+// onSheetClose runs once when the sheet goes away (e.g. to undo a color preview).
+let onSheetClose = null;
+function closeSheet() {
+  const sheet = $('sheet');
+  sheet.hidden = true;
+  sheet.classList.remove('peek');
+  if (onSheetClose) { const f = onSheetClose; onSheetClose = null; f(); }
+}
 $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 
 // Name, then optionally a daily goal in some unit (e.g. 2 L). Suggested units follow the name as you type.
@@ -327,7 +334,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 19</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 20</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
@@ -404,23 +411,32 @@ function openAddSheet() {
 }
 $('add').onclick = openAddSheet;
 
+// A slim bar with a swipeable row of colors; the home screen stays visible and previews each tap.
+// Done keeps the color; Cancel or tapping the screen above goes back to the previous one.
 function openThemeSheet() {
-  const draw = () => openSheet(`
-    <h2>Colors</h2>
-    <p class="sub">${THEMES[themeIndex][0]}</p>
+  let pick = themeIndex;
+  $('sheet').classList.add('peek');
+  openSheet(`
+    <div class="peek-top"><button class="link" id="cancel">Cancel</button><b id="theme-name">${THEMES[pick][0]}</b><button class="link strong" id="close">Done</button></div>
     <div class="themes">${THEMES.map(([n, a, b, c, light], i) =>
-      `<button class="swatch${i === themeIndex ? ' sel' : ''}${light ? ' light' : ''}" data-i="${i}" aria-label="${n}" style="background:linear-gradient(160deg, ${a}, ${b}, ${c})"></button>`).join('')}</div>
-    <div class="actions"><button class="primary" id="close">Done</button></div>
+      `<button class="swatch${i === pick ? ' sel' : ''}${light ? ' light' : ''}" data-i="${i}" aria-label="${n}" style="background:linear-gradient(160deg, ${a}, ${b}, ${c})"></button>`).join('')}</div>
   `, panel => {
     panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
-      themeIndex = +b.dataset.i;
-      applyTheme(themeIndex);
-      try { localStorage.setItem(THEME_KEY, themeIndex); } catch {}
-      draw();
+      pick = +b.dataset.i;
+      applyTheme(pick);
+      panel.querySelector('.swatch.sel').classList.remove('sel');
+      b.classList.add('sel');
+      $('theme-name').textContent = THEMES[pick][0];
     });
-    $('close').onclick = closeSheet;
+    panel.querySelector('.swatch.sel').scrollIntoView({ block: 'nearest', inline: 'center' });
+    onSheetClose = () => applyTheme(themeIndex);
+    $('cancel').onclick = closeSheet;
+    $('close').onclick = () => {
+      themeIndex = pick;
+      try { localStorage.setItem(THEME_KEY, themeIndex); } catch {}
+      closeSheet();
+    };
   });
-  draw();
 }
 $('theme').onclick = openThemeSheet;
 

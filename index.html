@@ -144,9 +144,16 @@
   .bar.on .fill { background:rgb(var(--fg)); box-shadow:0 0 0 2px rgba(var(--fg),.35); }
   .bar .tick { position:absolute; bottom:0; left:50%; transform:translateX(-50%); font-size:10px; opacity:.8; white-space:nowrap; color:rgb(var(--fg)); }
   .note { font-size:14px; opacity:.9; margin-top:10px; }
-  .themes { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; margin-bottom:18px; }
+  /* Color picker: a slim bar over an undimmed screen so each color previews on the real home screen. */
+  .sheet.peek { background:transparent; }
+  .sheet.peek .panel { padding:12px 0 calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -8px 30px rgba(0,0,0,.25); }
+  .peek-top { display:flex; align-items:center; justify-content:space-between; padding:0 16px 10px; }
+  .link { font:inherit; font-size:16px; background:none; border:0; color:var(--muted); padding:6px 2px; cursor:pointer; }
+  .link.strong { color:var(--text); font-weight:700; }
+  .themes { display:flex; gap:12px; overflow-x:auto; padding:6px 16px 8px; scroll-snap-type:x proximity; scrollbar-width:none; }
+  .themes::-webkit-scrollbar { display:none; }
   .swatch.light { box-shadow:inset 0 0 0 1px rgba(0,0,0,.08); }
-  .swatch { aspect-ratio:1; padding:0; border:0; border-radius:50%; cursor:pointer; -webkit-appearance:none; appearance:none; }
+  .swatch { flex:0 0 52px; height:52px; scroll-snap-align:center; padding:0; border:0; border-radius:50%; cursor:pointer; -webkit-appearance:none; appearance:none; }
   .swatch.sel { outline:3px solid var(--text); outline-offset:3px; }
   .sheet { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:flex-end; z-index:10; }
   .sheet[hidden] { display:none; }
@@ -202,7 +209,7 @@
 <input type="file" id="file" accept="application/json" hidden>
 <div id="stats" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="icons.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
