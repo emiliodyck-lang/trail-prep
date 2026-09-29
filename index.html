@@ -118,6 +118,21 @@
   @media (prefers-reduced-motion: reduce) { .minis.drift .track { animation:none; } }
   .sdots { margin-top:2px; }
 
+  /* Robinhood-style chart: big number, change line, clean chart with dotted start line, period pills */
+  .rh { margin-top:-2px; }
+  .rh-val { font-size:52px; font-weight:800; line-height:1; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  .rh-sub { font-size:15px; font-weight:600; margin:8px 0 14px; min-height:20px; opacity:.95; font-variant-numeric:tabular-nums; }
+  .rh-sub .chg { font-weight:800; }
+  .rh .readout { display:none; }
+  .lchart.clean .grid { display:none; }
+  .rh .lplot, .rh .xlabels { padding-left:0; }
+  .rh .lplot { height:170px; }
+  .rh-periods { display:flex; justify-content:space-between; gap:4px; margin-top:14px; }
+  .rh-periods button { flex:1; font:inherit; font-size:14px; font-weight:800; color:rgb(var(--fg)); background:none; border:0; padding:8px 0; border-radius:10px; opacity:.65; cursor:pointer; transition:transform .12s; }
+  .rh-periods button:active { transform:scale(.93); }
+  .rh-periods button.sel { background:rgba(var(--fg),.2); opacity:1; }
+  .rh-range { font-size:12px; opacity:.75; text-align:center; margin:10px 0 0; }
+
   /* Which dates the stats cover */
   .pnav { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin:-4px 0 14px; }
   .plabel { font-size:14px; font-weight:600; opacity:.9; text-align:center; }
@@ -294,7 +309,7 @@
 <div id="stats" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=30"></script>
-<script src="app.js?v=30"></script>
+<script src="icons.js?v=31"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

@@ -802,7 +802,7 @@ function trendLine(sel, st, range) {
     let dn = 0, ps = 0;
     for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += days[j].done; ps += days[j].possible; }
     const date = fmtDay(x.d, { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) });
-    points.push({ d: x.d, v: ps ? Math.min(100, dn / ps * 100) : null,
+    points.push({ d: x.d, label: date, v: ps ? Math.min(100, dn / ps * 100) : null,
       tip: ps ? `${date}: ${pct(dn, ps)}%${win > 1 ? '' : ` (${rnd(dn)} of ${rnd(ps)})`}` : `${date}: nothing to do` });
   });
   // 2 labels for short periods, up to 5 for long ones; months ("Jan 26") once it's longer than ~2 months.
@@ -823,11 +823,11 @@ function dayProgress(due, key) {
   return Array.from({ length: 25 }, (_, hr) => {
     if (hr * 60 > nowMin + 60) return { v: null, tip: '' };
     const n = mins.filter(m => m < hr * 60).length;
-    return { v: due.length ? n / due.length * 100 : null, tip: `By ${hourName(hr)}: ${n} of ${due.length} done (${pct(n, due.length)}%)` };
+    return { label: `By ${hourName(hr)} · ${n} of ${due.length} done`, v: due.length ? n / due.length * 100 : null, tip: `By ${hourName(hr)}: ${n} of ${due.length} done (${pct(n, due.length)}%)` };
   });
 }
 
-function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
+function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%'], { baseline = null, clean = false } = {}) {
   const W = 300, H = 120, n = points.length;
   const x = i => n === 1 ? W / 2 : i / (n - 1) * W, y = v => H - v / 100 * H;
   let line = '', pen = false;
@@ -842,7 +842,7 @@ function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
   const area = segs.map(sg => `M${x(sg[0]).toFixed(1)},${H}` + sg.map(i => `L${x(i).toFixed(1)},${y(points[i].v).toFixed(1)}`).join('') + `L${x(sg[sg.length - 1]).toFixed(1)},${H}Z`).join('');
   const lastI = points.map(p => p.v != null).lastIndexOf(true);
   const gid = 'lg' + (++lineChart.n || (lineChart.n = 1));
-  return `<div class="lchart${yLabels.some(Boolean) ? '' : ' noy'}">
+  return `<div class="lchart${yLabels.some(Boolean) ? '' : ' noy'}${clean ? ' clean' : ''}">
     <div class="readout" aria-live="polite">${lastI >= 0 ? esc(points[lastI].tip) : 'No data yet'}</div>
     <div class="lplot">
       <div class="grid">${yLabels.map(l => `<span>${l}</span>`).join('')}</div>
@@ -850,6 +850,7 @@ function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
           <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
           <path d="${area}" fill="url(#${gid})"/>
+          ${baseline != null ? `<line x1="0" x2="${W}" y1="${y(baseline).toFixed(1)}" y2="${y(baseline).toFixed(1)}" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-dasharray="1 5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : ''}
           <path d="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
         </svg>
         <span class="xhair" hidden></span><span class="xdot" hidden></span>
@@ -860,7 +861,7 @@ function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
 }
 
 // Drag or tap across the line to read any day.
-function bindLineChart(root, points) {
+function bindLineChart(root, points, onScrub) {
   const box = root.querySelector('.lsvg'), out = root.querySelector('.readout');
   const hair = root.querySelector('.xhair'), dot = root.querySelector('.xdot');
   const n = points.length;
@@ -872,9 +873,16 @@ function bindLineChart(root, points) {
     hair.hidden = false; hair.style.left = left + '%';
     dot.hidden = p.v == null; if (p.v != null) { dot.style.left = left + '%'; dot.style.top = (100 - p.v) + '%'; }
     if (p.tip) out.textContent = p.tip;
+    if (onScrub && p.v != null) onScrub(p);
   };
   box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); at(e); });
   box.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || box.hasPointerCapture(e.pointerId)) at(e); });
+  if (onScrub) {
+    const end = () => { hair.hidden = true; dot.hidden = true; onScrub(null); };
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
+    box.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') end(); });
+  }
 }
 
 // Check-offs per hour across the selected habits and range, smoothed over 3 hours (wrapping at midnight).
@@ -930,9 +938,6 @@ function openStats() {
   view.innerHTML = `<div class="stats-in">
       <div class="stats-top">
         <button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1>
-        <label class="range">
-          <select id="range" aria-label="Time range">${RANGES.map(([k, label]) => `<option value="${k}"${statsView.range === k ? ' selected' : ''}>${label}</option>`).join('')}</select>
-        </label>
       </div>
     </div>
     <div class="carousel" id="carousel">
@@ -960,12 +965,6 @@ function openStats() {
     if (id && id !== statsView.habit) { statsView.habit = id; drawBody(); }
   }, { passive: true });
 
-  $('range').onchange = e => {
-    const prev = statsView.range;
-    statsView.range = e.target.value;
-    if (statsView.range === 'custom') pickCustom(prev);
-    else drawBody();
-  };
   $('stats-close').onclick = closeStats;
   drawBody();
 }
@@ -974,8 +973,8 @@ function openStats() {
 function pickCustom(prev) {
   const habits = state.habits.filter(h => !h.archived);
   const earliest = Math.min(...habits.map(startOf));
-  openRangePicker(earliest, r => { statsView.custom = r; statsView.range = 'custom'; $('range').value = 'custom'; drawBody(); },
-    () => { if (!statsView.custom) { statsView.range = prev; $('range').value = prev; } drawBody(); });
+  openRangePicker(earliest, r => { statsView.custom = r; statsView.range = 'custom'; drawBody(); },
+    () => { if (!statsView.custom) statsView.range = prev; drawBody(); });
 }
 
 function drawBody() {
@@ -987,7 +986,6 @@ function drawBody() {
   const p = period(range, earliest);
   const st = computeStats(sel, p.from, p.to);
 
-  const nav = `<div class="pnav"><span class="plabel">${esc(p.label)}</span>${range === 'custom' ? '<button class="chip pchange" id="p-change">Change dates</button>' : ''}</div>`;
 
   const wk = h => sched(h).type === 'weekly' ? '<small> wk</small>' : '';
   // A single day counts everything that was due that day, today included ("0 of 3 done" beats "0 of 0").
@@ -996,7 +994,6 @@ function drawBody() {
   const dayDone = dayDue.filter(h => h.done.includes(keyOf(p.from))).length;
   const [doneN, possibleN] = range === 'day' ? [dayDone, dayDue.length] : [st.done, st.possible];
   const nums = one ? [
-    [`${pct(doneN, possibleN)}%`, 'completion'],
     [`${rnd(doneN)}<small>/${rnd(possibleN)}</small>`, sched(one).type === 'weekly' ? 'check-offs' : 'days done'],
     [one.done.length, 'all-time total'],
     [`${streak(one)}${wk(one)}`, 'current streak'],
@@ -1004,12 +1001,11 @@ function drawBody() {
   ] : (() => {
     const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
     return [
-      [`${pct(doneN, possibleN)}%`, 'completion'],
       [`${rnd(doneN)}<small>/${rnd(possibleN)}</small>`, 'check-offs'],
       [`${best[0]}${best[0] ? wk(best[1]) : ''}`, `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
     ];
   })();
-  const numsHTML = `<div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>`;
+  const numsHTML = `<div class="nums" style="grid-template-columns:repeat(${nums.length === 4 ? 2 : nums.length}, 1fr)">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>`;
 
   const body = $('stats-body');
   const bindBars = () => {
@@ -1024,7 +1020,6 @@ function drawBody() {
   const todNoteFor = tod => tod.total
     ? `Usually around <b>${hourName(tod.peak)}</b> · ${tod.total} timed check-off${tod.total === 1 ? '' : 's'}.`
     : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
-  const bindPick = () => { const b = $('p-change'); if (b) b.onclick = () => pickCustom(range); };
 
   const isDay = range === 'day';
   const cs = isDay ? computeStats(sel, weekStart(p.from), weekStart(p.from) + 6) : st;   // day-of-week bars' period
@@ -1042,19 +1037,42 @@ function drawBody() {
   const tod = isDay ? timeOfDay(sel, p.from, p.from) : timeOfDay(sel, st.from, st.to);
   const todNote = isDay ? (tod.total ? `Around <b>${hourName(tod.peak)}</b> today.` : 'Nothing checked off yet today.') : todNoteFor(tod);
 
+  // Robinhood-style header: the big number is the period's completion; dragging the chart shows each point
+  // instead, with how far it is from where the line started. Lifting the finger snaps back.
+  const drawn = pts.filter(x => x.v != null);
+  const startV = drawn.length ? drawn[0].v : null, endV = drawn.length ? drawn[drawn.length - 1].v : null;
+  const SINCE = { day: 'today', week: 'past week', month: 'past month', year: 'past year', all: 'all time', custom: 'in this range' };
+  const change = (v, when) => {
+    if (isDay) return when;
+    const dlt = Math.round(v - startV);
+    return `<span class="chg">${dlt > 0 ? '▲' : dlt < 0 ? '▼' : '•'} ${Math.abs(dlt)}%</span> ${when}`;
+  };
+  const idleSub = isDay ? `${dayDone} of ${dayDue.length} done today` : drawn.length > 1 ? change(endV, SINCE[range]) : esc(p.label);
+  const PILLS = [['day', '1D'], ['week', '1W'], ['month', '1M'], ['year', '1Y'], ['all', 'ALL'], ['custom', 'Custom']];
   body.innerHTML = `
-    ${nav}
-    ${numsHTML}
+    <div class="rh">
+      <div class="rh-val" id="rh-val">${pct(doneN, possibleN)}%</div>
+      <div class="rh-sub" id="rh-sub">${idleSub}</div>
+      ${pts.length ? lineChart(pts, xLabels, ['', '', ''], { baseline: isDay ? null : startV, clean: true }) : `<p class="note">${isDay ? 'Nothing due today.' : 'Nothing to show for this period yet.'}</p>`}
+      <div class="rh-periods">${PILLS.map(([k, l]) => `<button class="${range === k ? 'sel' : ''}" data-r="${k}">${l}</button>`).join('')}</div>
+      <p class="rh-range">${esc(p.label)}</p>
+    </div>
     <hr class="sep">
-    <h3>${trend.title}</h3>
-    ${pts.length ? lineChart(pts, xLabels) : `<p class="note">${isDay ? 'Nothing due today.' : 'Nothing to show for this period yet.'}</p>`}
+    ${numsHTML}
     <hr class="sep">
     <div class="duo">
       <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${isDay ? `${fmtDay(cs.from, { month: 'short', day: 'numeric' })} – ${fmtDay(cs.from + 6, { month: 'short', day: 'numeric' })}` : wdNote}</p></div>
       <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${todNote}</p></div>
     </div>`;
-  bindPick();
-  if (pts.length) bindLineChart(body.querySelector('.lchart'), pts);
+  body.querySelectorAll('.rh-periods [data-r]').forEach(b => b.onclick = () => {
+    const r = b.dataset.r;
+    if (r === 'custom') pickCustom(range);          // also re-opens the calendar when Custom is already on
+    else { statsView.range = r; drawBody(); }
+  });
+  if (pts.length) bindLineChart(body.querySelector('.rh .lchart'), pts, pt => {
+    $('rh-val').textContent = `${pct(pt ? pt.v : doneN, pt ? 100 : possibleN)}%`;
+    $('rh-sub').innerHTML = pt ? (isDay ? esc(pt.label) : change(pt.v, esc(pt.label))) : idleSub;
+  });
   bindLineChart($('tod').querySelector('.lchart'), tod.points);
   $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : isDay ? 'No times today' : 'No times yet';
   const bc = bindBars();
@@ -1167,7 +1185,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 30</div>
+      <div class="links">Version 31</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
