@@ -950,53 +950,6 @@ function openStats() {
   drawBody();
 }
 
-const clockTime = min => new Date(2000, 0, 1, Math.floor(min / 60), min % 60).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-// Month grid: a single habit shows done / missed / rest days; "All habits" shades each day by how much got done.
-function monthCalendar(p, habits, one, st) {
-  const today = todayNum(), byDay = new Map(st.days.map(x => [x.d, x]));
-  const cells = [];
-  for (let i = 0; i < weekdayOf(p.from); i++) cells.push('<span class="cd blank"></span>');
-  for (let d = p.from; d <= p.to; d++) {
-    const n = new Date(d * 864e5).getUTCDate();
-    let cls = 'none', style = '', tip = fmtDay(d, { weekday: 'short', month: 'short', day: 'numeric' });
-    if (d > today) cls = 'future';
-    else if (one) {
-      const hit = one.done.includes(keyOf(d));
-      if (d < startOf(one)) cls = 'none';
-      else if (hit) { cls = 'done'; tip += ': done'; }
-      else if (isPausedOn(one, d)) { cls = 'rest'; tip += ': paused'; }
-      else if (sched(one).type === 'weekly' || !isDueOn(one, d)) { cls = 'rest'; tip += ': not needed'; }
-      else if (d === today) { cls = 'open'; tip += ': not yet'; }
-      else { cls = 'miss'; tip += ': missed'; }
-    } else {
-      const x = byDay.get(d);
-      if (x && x.possible) {
-        const a = Math.min(1, x.done / x.possible);
-        cls = a ? 'heat' : 'miss'; style = ` style="--a:${(.15 + .85 * a).toFixed(2)}"`;
-        tip += `: ${pct(x.done, x.possible)}% (${rnd(x.done)} of ${rnd(x.possible)})`;
-      }
-    }
-    cells.push(`<span class="cd ${cls}${d === today ? ' today' : ''}"${style} title="${esc(tip)}">${n}</span>`);
-  }
-  return `<div class="cal">${DAY_LETTERS.map(l => `<span class="cw">${l}</span>`).join('')}${cells.join('')}</div>
-    <p class="cal-key">${one ? '<i class="k done"></i>Done <i class="k miss"></i>Missed <i class="k rest"></i>Rest / not needed' : '<i class="k heat"></i>More done <i class="k miss"></i>Nothing done'}</p>`;
-}
-
-// Day view: each habit's state on that day, with the time it was checked off when known.
-function dayList(d, habits) {
-  const today = todayNum(), key = keyOf(d);
-  const rows = habits.filter(h => d >= startOf(h)).map(h => {
-    const hit = h.done.includes(key), t = h.times && h.times[key];
-    const status = hit ? `Done${t != null ? ' · ' + clockTime(t) : ''}`
-      : isPausedOn(h, d) ? 'Paused'
-      : sched(h).type === 'weekly' ? `Not done · ${weekCount(h, d)}/${sched(h).times} that week`
-      : !isDueOn(h, d) ? 'Rest day'
-      : d === today ? 'Not yet' : 'Missed';
-    return `<div class="drow${hit ? ' hit' : ''}"><span class="sface">${faceHTML(h)}</span><span class="sname">${esc(h.name)}</span><span class="dstat">${status}</span></div>`;
-  });
-  return rows.length ? `<div class="dlist">${rows.join('')}</div>` : '<p class="note">No habits yet on this day.</p>';
-}
 
 function drawBody() {
   const habits = state.habits.filter(h => !h.archived);
@@ -1018,20 +971,18 @@ function drawBody() {
   const dayDue = range === 'day' ? sel.filter(h => p.from >= startOf(h) && !isPausedOn(h, p.from)
     && (h.done.includes(keyOf(p.from)) || (sched(h).type !== 'weekly' && isDueOn(h, p.from)))) : [];
   const dayDone = dayDue.filter(h => h.done.includes(keyOf(p.from))).length;
-  const nums = range === 'day' ? [
-    [`${pct(dayDone, dayDue.length)}%`, 'completion'],
-    [`${dayDone}<small>/${dayDue.length}</small>`, 'done'],
-  ] : one ? [
-    [`${pct(st.done, st.possible)}%`, 'completion'],
-    [`${rnd(st.done)}<small>/${rnd(st.possible)}</small>`, sched(one).type === 'weekly' ? 'check-offs' : 'days done'],
+  const [doneN, possibleN] = range === 'day' ? [dayDone, dayDue.length] : [st.done, st.possible];
+  const nums = one ? [
+    [`${pct(doneN, possibleN)}%`, 'completion'],
+    [`${rnd(doneN)}<small>/${rnd(possibleN)}</small>`, sched(one).type === 'weekly' ? 'check-offs' : 'days done'],
     [one.done.length, 'all-time total'],
     [`${streak(one)}${wk(one)}`, 'current streak'],
     [`${longestStreak(one)}${wk(one)}`, 'longest streak'],
   ] : (() => {
     const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
     return [
-      [`${pct(st.done, st.possible)}%`, 'completion'],
-      [`${rnd(st.done)}<small>/${rnd(st.possible)}</small>`, 'check-offs'],
+      [`${pct(doneN, possibleN)}%`, 'completion'],
+      [`${rnd(doneN)}<small>/${rnd(possibleN)}</small>`, 'check-offs'],
       [`${best[0]}${best[0] ? wk(best[1]) : ''}`, `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
     ];
   })();
@@ -1052,62 +1003,47 @@ function drawBody() {
     : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
   const bindPick = () => { const b = $('p-pick'); if (b) b.onclick = () => openPeriodPicker(range, earliest); };
 
-  if (range === 'day') {
-    // The day's habits, plus that week's days as bars (this day highlighted) and that day's check-off times.
-    const ws = weekStart(p.from), wkSt = computeStats(sel, ws, ws + 6);
-    const byDay = new Map(wkSt.days.map(x => [x.d, x]));
-    const bars = Array.from({ length: 7 }, (_, i) => {
-      const x = byDay.get(ws + i) || { done: 0, possible: 0 };
-      return { ...x, short: DAY_LETTERS[i], long: fmtDay(ws + i, { weekday: 'short', month: 'short', day: 'numeric' }) };
-    });
-    const tod = timeOfDay(sel, p.from, p.from);
-    body.innerHTML = `${nav}${numsHTML}<hr class="sep"><h3>${one ? 'That day' : 'Your habits that day'}</h3>${dayList(p.from, sel)}
-      <hr class="sep">
-      <div class="duo">
-        <div><h3>That week</h3>${barChart(bars)}<p class="note">${fmtDay(ws, { month: 'short', day: 'numeric' })} – ${fmtDay(ws + 6, { month: 'short', day: 'numeric' })}</p></div>
-        <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${tod.total ? `Around <b>${hourName(tod.peak)}</b> that day.` : 'No check-off times saved for this day.'}</p></div>
-      </div>`;
-    bindPick();
-    const bc = bindBars(), mine = bc.querySelectorAll('.bar')[weekdayOf(p.from)];
-    mine.classList.add('on'); bc.querySelector('.readout').textContent = mine.dataset.tip;
-    bindLineChart($('tod').querySelector('.lchart'), tod.points);
-    $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times that day';
-    return;
-  }
-
-  const ext = computeStats(sel, p.from - 6, p.to);
-  const pts = trendPoints(ext, range, st.from);
+  const isDay = range === 'day';
+  const cs = isDay ? computeStats(sel, weekStart(p.from), weekStart(p.from) + 6) : st;   // charts' period
+  const ext = computeStats(sel, (isDay ? cs.from : p.from) - 6, isDay ? cs.to : p.to);
+  const pts = trendPoints(ext, isDay ? 'week' : range, cs.from);
   const yr = range === 'all' || range === 'year' ? { year: 'numeric' } : {};
-  const first = fmtDay(st.from, { month: 'short', day: 'numeric', ...yr });
-  const last = st.to === today ? 'Today' : fmtDay(st.to, { month: 'short', day: 'numeric', ...yr });
+  const first = fmtDay(cs.from, { month: 'short', day: 'numeric', ...yr });
+  const last = cs.to === today ? 'Today' : fmtDay(cs.to, { month: 'short', day: 'numeric', ...yr });
 
   const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  const wd = st.weekday.map((w, i) => ({ ...w, short: names[i][0], long: names[i] }));
+  const wd = cs.weekday.map((w, i) => ({ ...w, short: names[i][0], long: isDay ? fmtDay(cs.from + i, { weekday: 'long', month: 'short', day: 'numeric' }) : names[i] }));
   const ranked = wd.filter(w => w.possible).sort((a, c) => pct(c.done, c.possible) - pct(a.done, a.possible));
   const wdNote = ranked.length > 1
     ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
     : 'Keep going to see which days work best.';
 
-  const tod = timeOfDay(sel, st.from, st.to);
-  const todNote = todNoteFor(tod);
+  const tod = isDay ? timeOfDay(sel, p.from, p.from) : timeOfDay(sel, st.from, st.to);
+  const todNote = isDay ? (tod.total ? `Around <b>${hourName(tod.peak)}</b> that day.` : 'No check-off times saved for this day.') : todNoteFor(tod);
 
   body.innerHTML = `
     ${nav}
     ${numsHTML}
-    ${range === 'month' ? `<hr class="sep"><h3>Calendar</h3>${monthCalendar(p, habits, one, st)}` : ''}
     <hr class="sep">
-    <h3>${range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
+    <h3>${isDay ? 'That week' : range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
     ${pts.length ? lineChart(pts, [first, last]) : '<p class="note">Nothing to show for this period yet.</p>'}
     <hr class="sep">
     <div class="duo">
-      <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${wdNote}</p></div>
+      <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${isDay ? `${fmtDay(cs.from, { month: 'short', day: 'numeric' })} – ${fmtDay(cs.from + 6, { month: 'short', day: 'numeric' })}` : wdNote}</p></div>
       <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${todNote}</p></div>
     </div>`;
   bindPick();
   if (pts.length) bindLineChart(body.querySelector('.lchart'), pts);
   bindLineChart($('tod').querySelector('.lchart'), tod.points);
-  $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times yet';
-  bindBars();
+  $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : isDay ? 'No times that day' : 'No times yet';
+  const bc = bindBars();
+  if (isDay) {
+    // Point both week charts at the picked day.
+    const i = p.from - cs.from, bar = bc.querySelectorAll('.bar')[i];
+    bar.classList.add('on'); bc.querySelector('.readout').textContent = bar.dataset.tip;
+    const lc = body.querySelector('.lchart');
+    if (lc && pts[i]) lc.querySelector('.readout').textContent = pts[i].tip;
+  }
 }
 function closeStats() { hideAnimated($('stats')); }
 $('stats-btn').onclick = openStats;
@@ -1212,7 +1148,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 26</div>
+      <div class="links">Version 27</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
