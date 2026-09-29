@@ -215,10 +215,39 @@ function toggle(h, date) {
   const i = h.done.indexOf(date);
   if (i === -1) {
     h.done.push(date);
+    if (isAmount(h)) (h.amounts = h.amounts || {})[date] = Math.max(amountOn(h, date), h.goal);
     if (date === ymd(daysAgo(0))) { const now = new Date(); (h.times = h.times || {})[date] = now.getHours() * 60 + now.getMinutes(); }
   } else {
     h.done.splice(i, 1);
     if (h.times) delete h.times[date];
+    if (h.amounts) delete h.amounts[date];
+  }
+  if (navigator.vibrate) navigator.vibrate(10);
+  save();
+}
+
+// "Add amounts through the day" habits (h.track = 'amount') keep a running total per day in h.amounts.
+// A day counts as done (is in h.done) once its total reaches the goal, so streaks and stats work as usual.
+const isAmount = h => h.track === 'amount' && !!h.unit && h.goal > 0;
+const amountOn = (h, key) => (h.amounts && h.amounts[key]) || 0;
+const UNIT_STEPS = { L: 0.25, ml: 250, oz: 8, glasses: 1, cups: 1, km: 0.5, mi: 0.5, steps: 1000, pages: 5, minutes: 5, min: 5, hours: 0.5, reps: 10 };
+// Quick-add size: the unit's usual step, or a round number that takes about 4 taps to reach the goal.
+function stepFor(h) {
+  const known = UNIT_STEPS[h.unit];
+  if (known && known <= h.goal) return known;
+  return [1000, 500, 250, 100, 50, 25, 10, 5, 2, 1, 0.5, 0.25, 0.1].find(x => x <= h.goal / 4) || 0.1;
+}
+function addAmount(h, key, delta) {
+  const v = Math.max(0, Math.round((amountOn(h, key) + delta) * 1000) / 1000);
+  h.amounts = h.amounts || {};
+  if (v) h.amounts[key] = v; else delete h.amounts[key];
+  const was = h.done.includes(key), now = v >= h.goal;
+  if (now && !was) {
+    h.done.push(key);
+    if (key === ymd(daysAgo(0))) { const d = new Date(); (h.times = h.times || {})[key] = d.getHours() * 60 + d.getMinutes(); }
+  } else if (!now && was) {
+    h.done.splice(h.done.indexOf(key), 1);
+    if (h.times) delete h.times[key];
   }
   if (navigator.vibrate) navigator.vibrate(10);
   save();
@@ -309,7 +338,7 @@ function pressable(node, onTap, onHold) {
   node.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-let justToggled = null;
+let justToggled = null, animFromP = null;
 const pagesEl = $('pages');
 const currentPage = () => Math.round(pagesEl.scrollLeft / (pagesEl.clientWidth || 1));
 function goToPage(i) { pagesEl.scrollTo({ left: i * pagesEl.clientWidth, behavior: 'instant' }); updateDots(); }
@@ -353,12 +382,14 @@ function render() {
       } else if (type === 'days' && !isDueOn(h, tn) && !doneToday) {
         sub = 'Rest day';
       }
+      const amt = amountOn(h, today);
+      if (isAmount(h)) { p = Math.min(100, amt / h.goal * 100); done = doneToday; }
       // The habit just tapped starts in its old state so the ring can animate to the new one.
       const animate = h.id === justToggled;
       const cell = el('button', 'habit');
       const setState = (pp, dd) => { cell.style.setProperty('--p', pp); cell.classList.toggle('done', dd); cell.classList.toggle('part', pp > 0 && pp < 100); };
       if (animate) {
-        const before = type === 'weekly' ? Math.min(100, (weekCount(h, tn) + (doneToday ? -1 : 1)) / (weeklyTarget(h, tn, startOf(h)) || 1) * 100) : 100 - p;
+        const before = animFromP != null ? animFromP : type === 'weekly' ? Math.min(100, (weekCount(h, tn) + (doneToday ? -1 : 1)) / (weeklyTarget(h, tn, startOf(h)) || 1) * 100) : 100 - p;
         setState(before, before >= 100);
         requestAnimationFrame(() => requestAnimationFrame(() => setState(p, done)));
       } else setState(p, done);
@@ -370,10 +401,10 @@ function render() {
       ring.append(el('span', 'ok', '✓'));
       const label = el('span', 'label');
       label.append(el('span', 'n', h.name));
-      const info = [sub, h.unit ? `${fmt(h.goal)} ${h.unit}` : '', streakLabel(h)].filter(Boolean).join(' · ');
+      const info = [sub, h.unit ? (isAmount(h) ? `${fmt(amt)} / ${fmt(h.goal)} ${h.unit}` : `${fmt(h.goal)} ${h.unit}`) : '', streakLabel(h)].filter(Boolean).join(' · ');
       if (info) label.append(el('span', 'g', info));
       cell.append(ring, label);
-      pressable(cell, () => { justToggled = h.id; toggle(h, today); justToggled = null; }, () => openEditSheet(h));
+      pressable(cell, () => { if (isAmount(h)) return openAmountSheet(h); justToggled = h.id; toggle(h, today); justToggled = null; }, () => openEditSheet(h));
       page.append(cell);
     }
     pagesEl.append(page);
@@ -455,9 +486,53 @@ function toast(msg) {
   t.timer = setTimeout(() => hideAnimated(t), 2600);
 }
 
+// Tapping an amount habit: quick buttons, or type any amount. No auto-focus, so the keyboard only opens
+// when the box is tapped.
+function openAmountSheet(h) {
+  const key = ymd(daysAgo(0)), amt = amountOn(h, key), step = stepFor(h);
+  const q = /water|drink|hydrat|juice|tea|coffee|milk/i.test(h.name) ? 'How much did you drink?' : 'How much did you do?';
+  const quick = [step, step * 2, step * 4].filter((v, i) => i === 0 || v <= h.goal);
+  const add = v => {
+    const before = Math.min(100, amountOn(h, key) / h.goal * 100);
+    closeSheet();
+    justToggled = h.id; animFromP = before;
+    addAmount(h, key, v);
+    justToggled = null; animFromP = null;
+  };
+  openSheet(`
+    <h2>${q}</h2>
+    <p class="sub">${esc(h.name)} · <b>${fmt(amt)} / ${fmt(h.goal)} ${esc(h.unit)}</b> so far today</p>
+    <div class="chips">
+      ${quick.map(v => `<button class="chip qa" data-v="${v}">+${fmt(v)} ${esc(h.unit)}</button>`).join('')}
+      ${amt > 0 ? `<button class="chip" data-v="${-Math.min(step, amt)}">−${fmt(Math.min(step, amt))} ${esc(h.unit)}</button>` : ''}
+    </div>
+    <label class="field">Or type an amount
+      <span class="goal"><input id="amt-in" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="e.g. ${fmt(step * 2)}"><span class="unit">${esc(h.unit)}</span></span>
+    </label>
+    <div class="actions"><button class="ghost" id="amt-cancel">Cancel</button><button class="primary" id="amt-add">Add</button></div>
+  `, panel => {
+    const input = $('amt-in');
+    panel.querySelectorAll('[data-v]').forEach(b => b.onclick = () => add(parseFloat(b.dataset.v)));
+    $('amt-cancel').onclick = closeSheet;
+    $('amt-add').onclick = () => {
+      const v = parseFloat(input.value.replace(',', '.'));
+      if (v > 0) add(v); else input.focus();
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') $('amt-add').click(); };
+  });
+}
+
+// "How do you log it?": one tap when the goal is reached, or amounts added through the day.
+const trackChips = cur => `
+  <div class="field">How do you log it?</div>
+  <div class="chips">
+    <button class="chip${cur !== 'amount' ? ' sel' : ''}" data-track="check">Check off once</button>
+    <button class="chip${cur === 'amount' ? ' sel' : ''}" data-track="amount">Add amounts through the day</button>
+  </div>`;
+
 // Name, how often, then optionally an icon and a goal in some unit (e.g. 2 L). Suggestions follow the name as you type.
 function openAddSheet() {
-  const pick = { mode: 'none', goal: '', unit: '', auto: true, face: {}, schedule: { type: 'daily' } };
+  const pick = { mode: 'none', goal: '', unit: '', auto: true, face: {}, schedule: { type: 'daily' }, track: 'check' };
   openSheet(`
     <h2>New habit</h2>
     <label class="field">Name<span class="goal"><input id="hname" maxlength="40" placeholder="e.g. Drink water" autocomplete="off"></span></label>
@@ -489,11 +564,13 @@ function openAddSheet() {
             ? `<input id="unit" placeholder="unit, e.g. cups" maxlength="12" value="${esc(pick.unit)}">`
             : `<span class="unit">${esc(pick.mode)}</span>`}
         </span>
-      </label>`}`;
+      </label>
+      ${trackChips(pick.track)}`}`;
     const goal = $('goal'), unit = $('unit');
     if (goal) goal.oninput = () => { pick.goal = goal.value; };
     if (unit) unit.oninput = () => { pick.unit = unit.value; };
-    $('opts').querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    $('opts').querySelectorAll('[data-track]').forEach(b => b.onclick = () => { pick.track = b.dataset.track; drawOpts(); });
+    $('opts').querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
       pick.auto = false;
       pick.mode = b.dataset.mode;
       const u = units.find(u => u[0] === pick.mode);
@@ -529,6 +606,7 @@ function openAddSheet() {
       if (!(g > 0)) return $('goal').focus();
       if (!u) return $('unit').focus();
       Object.assign(h, { unit: u, goal: g });
+      if (pick.track === 'amount') h.track = 'amount';
     }
     state.habits.push(h);
     closeSheet();
@@ -593,6 +671,7 @@ function openEditSheet(h) {
       <button class="act danger" id="del">${iconSvg('trash')}<span>Delete</span></button>
     </div>
     <div id="freq"></div>
+    <div id="track"></div>
     <p class="sub">Tap a day to mark it done or not done. Swipe for earlier days.</p>
     <div class="days" style="--c:${color}">${days}</div>
     <div id="emo"></div>
@@ -625,6 +704,20 @@ function openEditSheet(h) {
       drawEmoji();
     });
     drawEmoji();
+
+    const drawTrack = () => {
+      if (!h.unit) return;
+      $('track').innerHTML = trackChips(h.track);
+      $('track').querySelectorAll('[data-track]').forEach(b => b.onclick = () => {
+        if (b.dataset.track === 'amount') {
+          h.track = 'amount';
+          const key = ymd(daysAgo(0));   // keep today's state: already done means the goal is already reached
+          if (h.done.includes(key)) (h.amounts = h.amounts || {})[key] = Math.max(amountOn(h, key), h.goal);
+        } else delete h.track;
+        save(); drawTrack();
+      });
+    };
+    drawTrack();
 
     schedulePicker($('freq'), sched(h), v => {
       setSchedule(h, v);
@@ -1185,7 +1278,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 32</div>
+      <div class="links">Version 33</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
