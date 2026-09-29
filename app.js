@@ -3,23 +3,47 @@ const PER_PAGE = 6;
 const PALETTE = ['#ff6b6b', '#f59f00', '#12b886', '#4c6ef5', '#845ef7', '#e64980'];
 const $ = id => document.getElementById(id);
 
-// Background gradients: [top, middle, bottom]. Picked with the 🎨 button, remembered per device.
+// Background gradients: [name, top, middle, bottom, light?]. Light ones switch text and icons to dark.
+// Picked with the 🎨 button, remembered per device by index, so only ever append to this list.
 const THEMES = [
   ['Violet', '#5b7cfa', '#9b5de5', '#e05cb5'],
   ['Sunset', '#ff8a4c', '#ff4f7b', '#c2409b'],
   ['Ocean', '#2f6fe4', '#1596c9', '#12a88a'],
   ['Forest', '#11865f', '#2f9e44', '#7a9a12'],
   ['Night', '#262463', '#4a3fc4', '#8b3fd9'],
+  ['Black', '#2e2e33', '#1c1c20', '#0b0b0d'],
+  ['Graphite', '#6b7280', '#4b5563', '#2f3742'],
+  ['Silver', '#f4f5f7', '#d8dbe0', '#aeb4bd', true],
+  ['Blue', '#4f8df9', '#2563eb', '#1d44c4'],
+  ['Navy', '#27408b', '#1e3380', '#111c47'],
+  ['Sky', '#7dd3fc', '#38bdf8', '#0ea5e9', true],
+  ['Teal', '#2dd4bf', '#14b8a6', '#0f766e'],
+  ['Mint', '#a7f3d0', '#6ee7b7', '#34d399', true],
+  ['Green', '#4ade80', '#16a34a', '#166534'],
+  ['Lemon', '#fef08a', '#fde047', '#facc15', true],
+  ['Gold', '#fcd34d', '#f59e0b', '#d97706', true],
+  ['Orange', '#fdba74', '#f97316', '#c2410c'],
+  ['Red', '#f87171', '#dc2626', '#991b1b'],
+  ['Pink', '#f472b6', '#db2777', '#9d174d'],
+  ['Bubblegum', '#fce7f3', '#fbcfe8', '#f9a8d4', true],
+  ['Purple', '#c084fc', '#9333ea', '#581c87'],
+  ['Lavender', '#ede9fe', '#ddd6fe', '#c4b5fd', true],
+  ['Peach', '#ffe4d6', '#fecaca', '#fda4af', true],
+  ['Aurora', '#22d3ee', '#8b5cf6', '#ec4899'],
+  ['Tropical', '#fbbf24', '#f43f5e', '#8b5cf6'],
 ];
 const THEME_KEY = 'habits.theme';
 function applyTheme(i) {
-  const [, a, b, c] = THEMES[i] || THEMES[0];
+  const [, a, b, c, light] = THEMES[i] || THEMES[0];
   const st = document.body.style;
   st.setProperty('--g1', a); st.setProperty('--g2', b); st.setProperty('--g3', c);
+  st.setProperty('--fg', light ? '30,27,46' : '255,255,255');
+  st.setProperty('--sil', light ? 'brightness(0) invert(.12)' : 'brightness(0) invert(1)');
   document.querySelector('meta[name=theme-color]').content = a;
 }
 let themeIndex = 0;
 try { themeIndex = +localStorage.getItem(THEME_KEY) || 0; } catch {}
+if (!THEMES[themeIndex]) themeIndex = 0;
 applyTheme(themeIndex);
 
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -295,7 +319,7 @@ function openAddSheet() {
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 16</div>
+    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 17</div>
   `, () => {});
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
@@ -376,8 +400,8 @@ function openThemeSheet() {
   const draw = () => openSheet(`
     <h2>Colors</h2>
     <p class="sub">${THEMES[themeIndex][0]}</p>
-    <div class="themes">${THEMES.map(([n, a, b, c], i) =>
-      `<button class="swatch${i === themeIndex ? ' sel' : ''}" data-i="${i}" aria-label="${n}" style="background:linear-gradient(160deg, ${a}, ${b}, ${c})"></button>`).join('')}</div>
+    <div class="themes">${THEMES.map(([n, a, b, c, light], i) =>
+      `<button class="swatch${i === themeIndex ? ' sel' : ''}${light ? ' light' : ''}" data-i="${i}" aria-label="${n}" style="background:linear-gradient(160deg, ${a}, ${b}, ${c})"></button>`).join('')}</div>
     <div class="actions"><button class="primary" id="close">Done</button></div>
   `, panel => {
     panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
@@ -531,9 +555,9 @@ function lineChart(points, first, last) {
       <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
       <div class="lsvg">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".35"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
           <path d="${area}" fill="url(#lg)"/>
-          <path d="${line}" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+          <path d="${line}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
         </svg>
         <span class="xhair" hidden></span><span class="xdot" hidden></span>
       </div>
