@@ -47,11 +47,15 @@
   .ring svg.prog { position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); overflow:visible; }
   .ring circle { fill:none; stroke-width:4; }
   .ring .track { stroke:rgba(var(--fg),.3); }
-  /* Hidden when empty so the round cap doesn't leave a dot; stays visible while un-sweeping. */
-  .ring .arc { stroke:rgb(var(--fg)); stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:100; opacity:0;
+  /* --p (0-100, set per habit) is how much of the ring is filled: 100 when done, partial for weekly habits.
+     Hidden when empty so the round cap doesn't leave a dot; stays visible while un-sweeping. */
+  .habit { --p:0; }
+  .ring .arc { stroke:rgb(var(--fg)); stroke-linecap:round; stroke-dasharray:100; stroke-dashoffset:calc(100 - var(--p)); opacity:0;
     transition:stroke-dashoffset .6s cubic-bezier(.65,0,.35,1), opacity 0s .6s; }
   .habit.done .ring { background:rgba(var(--fg),.2); }
-  .habit.done .ring .arc { stroke-dashoffset:0; opacity:1; transition:stroke-dashoffset .6s cubic-bezier(.65,0,.35,1), opacity 0s; }
+  .habit.done .ring .arc, .habit.part .ring .arc { opacity:1; transition:stroke-dashoffset .6s cubic-bezier(.65,0,.35,1), opacity 0s; }
+  /* Rest days of a specific-days habit: faded, still tappable for a bonus session. */
+  .habit.rest .ring, .habit.rest .label { opacity:.45; }
   .ring .ok { position:absolute; right:4%; bottom:4%; width:calc(var(--size) * .24); height:calc(var(--size) * .24); min-width:22px; min-height:22px;
     border-radius:50%; background:rgb(var(--fg)); color:var(--g2); font-weight:900; font-size:max(13px, calc(var(--size) * .14)); display:grid; place-items:center;
     box-shadow:0 2px 6px rgba(0,0,0,.2); transform:scale(0); transition:transform .25s .45s cubic-bezier(.34,1.56,.64,1); }
@@ -66,7 +70,11 @@
   .dots span.on { background:rgb(var(--fg)); width:18px; border-radius:4px; }
 
   input { width:100%; min-width:0; font:inherit; font-size:16px; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--card); color:var(--text); }
-  .bottom { display:flex; justify-content:flex-end; padding:8px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .bottom { display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:8px 16px calc(12px + env(safe-area-inset-bottom)); }
+  .nudge { margin-right:auto; font:inherit; font-size:14px; font-weight:600; color:rgb(var(--fg)); background:none; border:1.5px dashed rgba(var(--fg),.6); border-radius:999px; padding:9px 14px; cursor:pointer; }
+  .toast { position:fixed; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:20; max-width:calc(100% - 32px); transform:translate(-50%, 12px); opacity:0;
+    background:rgba(20,20,28,.92); color:#fff; font-size:14px; padding:10px 16px; border-radius:12px; transition:opacity .25s, transform .25s; pointer-events:none; }
+  .toast.open { opacity:1; transform:translate(-50%, 0); }
   .pill { display:flex; align-items:center; gap:8px; font:inherit; font-weight:700; color:rgb(var(--fg)); background:rgba(var(--fg),.22); border:0; border-radius:999px; padding:11px 18px 11px 14px; cursor:pointer; }
   .pill svg { width:22px; height:22px; }
   .round svg { width:22px; height:22px; display:block; margin:auto; }
@@ -198,6 +206,40 @@
   .day.on i { color:inherit; }
   .day b { display:block; font-size:16px; }
   .day.on { background:var(--c); border-color:var(--c); color:#fff; }
+  .day.rest:not(.on) { opacity:.4; }
+
+  /* How often */
+  .weekdays { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; margin:-4px 0 16px; }
+  .wd { font:inherit; font-weight:700; aspect-ratio:1; border-radius:50%; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; padding:0; }
+  .wd.on { background:var(--text); border-color:var(--text); color:var(--bg); }
+  .stepper { display:flex; align-items:center; gap:14px; margin:-4px 0 16px; }
+  .stepper .chip { width:44px; height:44px; padding:0; font-size:22px; line-height:1; }
+  .stepper b { font-size:17px; min-width:90px; text-align:center; }
+
+  /* Hold menu: Pause / Finish / Delete */
+  .top-actions { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin:4px 0 16px; }
+  .act { display:flex; flex-direction:column; align-items:center; gap:4px; font:inherit; font-size:13px; font-weight:600; padding:10px 0; border-radius:14px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; transition:transform .12s; }
+  .act:active { transform:scale(.95); }
+  .act svg { width:22px; height:22px; }
+  .act.danger { color:var(--danger); }
+
+  /* Settings */
+  .sh { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:20px 0 6px; }
+  .srow { display:flex; align-items:center; gap:12px; width:100%; padding:8px 0; border:0; border-bottom:1px solid var(--line); background:none; color:var(--text); font:inherit; text-align:left; }
+  .srow.tap { cursor:pointer; }
+  .sface { flex:none; width:36px; height:36px; border-radius:50%; background:var(--bg); display:grid; place-items:center; font-weight:800; }
+  .sface svg, .sface .ic { width:20px; height:20px; color:var(--text); }
+  .sface .e { font-size:18px; }
+  .sname { flex:1; min-width:0; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sname small { display:block; font-weight:400; font-size:12px; color:var(--muted); }
+  .chev { color:var(--muted); font-size:22px; }
+  .srow .chip { padding:7px 12px; font-size:14px; }
+  .mini-btn { flex:none; width:36px; height:36px; display:grid; place-items:center; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; padding:0; }
+  .mini-btn svg { width:18px; height:18px; }
+  .mini-btn:disabled { opacity:.3; cursor:default; }
+  .mini-btn.danger { color:var(--danger); }
+  .actions button svg { width:18px; height:18px; vertical-align:-3px; margin-right:6px; }
+  .done-row { margin-top:12px; }
   .title-row { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   #edit-emoji { font-size:22px; width:28px; height:28px; display:grid; place-items:center; }
   #edit-emoji .ic, #edit-emoji .ic svg { width:26px; height:26px; color:var(--text); }
@@ -214,17 +256,18 @@
 <div class="app">
   <header>
     <div><h1 id="today">Today</h1><p class="sub" id="progress"></p></div>
-    <button class="round" id="theme" aria-label="Change colors"></button>
+    <button class="round" id="settings" aria-label="Settings"></button>
     <button class="round" id="add" aria-label="Add habit">+</button>
   </header>
   <div class="pages" id="pages"></div>
   <div class="dots" id="dots"></div>
-  <div class="bottom"><button class="pill" id="stats-btn"><span>Stats</span></button></div>
+  <div class="bottom"><button class="nudge" id="nudge" hidden>Back up your habits</button><button class="pill" id="stats-btn"><span>Stats</span></button></div>
 </div>
 <input type="file" id="file" accept="application/json" hidden>
 <div id="stats" hidden></div>
+<div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="icons.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

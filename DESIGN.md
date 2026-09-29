@@ -9,7 +9,10 @@
 - **Swipe left/right for more pages.** Habit 7 starts page 2, and so on. Dots at the bottom show which page you're on. Adding a habit jumps to its page.
 - **Small + in the top right** opens "New habit": a name, then optionally a unit and daily goal ("Drink water · 2 L"). Known words suggest units as you type ("water" → L / oz / glasses / ml, "read" → pages / minutes, "walk" → steps / km / mi…). "Other unit…" handles anything else, "No unit" skips it.
 - **Optional icon per habit.** 471 one-color icons in two styles: 305 clean ones from [Phosphor](https://phosphoricons.com) (fill weight, MIT) plus a custom-drawn toothbrush, and 165 bolder, sportier figures from [Material Symbols](https://fonts.google.com/icons) (rounded filled, Apache 2.0; keys prefixed `m-`). Suggestions alternate the two styles. All bundled in `icons.js` so they work offline and look identical on every phone. The New habit sheet suggests icons from the name ("water" → drops, "read" → books, "dog" → dog; generic star / target / fire when nothing matches), "All icons" opens the full grid, and you can still type your own emoji as a fallback (shown as a white silhouette). Old emoji choices migrate to the matching icon automatically. Hold a circle to change it later.
-- **Every habit is done or not done.** The goal is just a label. No partial amounts to log. (We tried +0.25 L logging; it was more daily work than it was worth.)
+- **How often** (add sheet and hold menu): **Every day**, **Specific days** (tap M T W T F S S; other days show faded as "Rest day", never count as missed, and can still be tapped for a bonus), or **N× a week** (tap on the days you do it; the ring fills 1/N per check-off and counts as done at N; streak counts weeks, "🔥 4 wk").
+- **Every check-off is done or not done.** The unit goal ("2 L") is just a label.
+- **Hold menu top row: Pause / Finish / Delete.** Pause hides the habit and pause days never count as missed (streak survives); Finish hides it but keeps history; both come back from Settings.
+- **⚙ Settings** (replaced the palette button): Colors, reorder active habits (up/down), paused habits (Resume), finished habits (Restore / Delete), Backup (Export / Import with "last backup" date). A dashed "Back up your habits" nudge appears on the home screen after 14 days without an export. The app also asks the browser for persistent storage.
 - **📊 Stats button at the bottom** (replaced the search bar) opens a full stats screen:
   - **Swipe a carousel** at the top to pick what you're looking at: first slide is **All habits** (a row of mini rings; with more than 5 it slowly drifts and fades at the edges), then one slide per habit with a big ring. Dots show the position.
   - **Range** is a small dropdown top-right: Week / Month / Year / All time (last 7 / 30 / 365 days, or since the first habit).
@@ -28,7 +31,6 @@
 | Feature | Why not (yet) |
 |---|---|
 | Accounts / sync | Adds a backend, auth and privacy work before there are any users. Export/import covers it for now. |
-| Custom schedules (3x/week, weekdays) | Most-requested feature and the biggest complexity trap. Add it only after daily habits prove out. |
 | Reminders / push | Web push is flaky on iOS. Build this in the native version. |
 | Gamification (points, badges, levels) | Works for a week, then gets annoying. The streak is enough. |
 | Categories, icons, picking colors | Setup busywork people do once and then abandon the app. Colors are assigned automatically. |

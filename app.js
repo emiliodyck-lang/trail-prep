@@ -55,7 +55,8 @@ const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '
 const PRESETS = [
   { match: /water|hydrat/i, units: [['L', 2], ['oz', 64], ['glasses', 8], ['ml', 2000]] },
   { match: /read|book/i, units: [['pages', 10], ['minutes', 20]] },
-  { match: /walk|run|jog|step|hike/i, units: [['steps', 8000], ['km', 5], ['mi', 3], ['minutes', 30]] },
+  { match: /run|jog/i, units: [['km', 5], ['mi', 3], ['minutes', 30]] },
+  { match: /walk|step|hike/i, units: [['steps', 8000], ['km', 5], ['mi', 3], ['minutes', 30]] },
   { match: /push.?up|sit.?up|squat|pull.?up|burpee/i, units: [['reps', 50]] },
   { match: /sleep/i, units: [['hours', 8]] },
   { match: /meditat|stretch|study|practi|exercise|workout|yoga|journal|plank/i, units: [['minutes', 15]] },
@@ -170,7 +171,7 @@ function iconPicker(box, name, h, onPick) {
       ${options.map(btn).join('')}
       <button class="chip" data-all="1">${all ? 'Fewer' : 'All icons'}</button>
     </div>
-    ${all ? `<div class="icon-grid">${Object.keys(ICONS).map(btn).join('')}</div>` : ''}
+    ${all ? `<div class="icon-grid">${Object.keys(ICONS).filter(n => !n.startsWith('ui-')).map(btn).join('')}</div>` : ''}
     <label class="field own-row">Or your own emoji
       <input class="own" maxlength="8" placeholder="${h.emoji ? esc(h.emoji) : 'e.g. 🎮'}" aria-label="Type your own emoji">
     </label>`;
@@ -223,13 +224,66 @@ function toggle(h, date) {
   save();
 }
 
-// Consecutive done days ending today, or ending yesterday if today isn't logged yet.
-function streak(h) {
-  const set = new Set(h.done);
-  let n = 0, i = set.has(ymd(daysAgo(0))) ? 0 : 1;
-  while (set.has(ymd(daysAgo(i)))) { n++; i++; }
-  return n;
+// ---- Schedules, pauses, streaks ----
+// h.schedule: missing/{ type: 'daily' } | { type: 'days', days: [0-6, Monday = 0] } | { type: 'weekly', times: N }
+// h.pauses: [{ from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' | null }]; to null = paused right now. Paused days never count as missed.
+// h.archived: 'YYYY-MM-DD' when finished; hidden everywhere but Settings, history kept.
+const dayNum = key => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
+const keyOf = n => new Date(n * 864e5).toISOString().slice(0, 10);
+const todayNum = () => dayNum(ymd(daysAgo(0)));
+const weekdayOf = n => (new Date(n * 864e5).getUTCDay() + 6) % 7;
+const weekStart = n => n - weekdayOf(n);
+const sched = h => h.schedule || { type: 'daily' };
+const startOf = h => Math.min(dayNum(h.created || ymd(daysAgo(0))), ...h.done.map(dayNum));
+const isPausedOn = (h, n) => (h.pauses || []).some(p => n >= dayNum(p.from) && (!p.to || n <= dayNum(p.to)));
+const isPaused = h => (h.pauses || []).some(p => !p.to);
+const isActive = h => !h.archived && !isPaused(h);
+const isDueOn = (h, n) => sched(h).type !== 'days' || sched(h).days.includes(weekdayOf(n));
+const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+function scheduleText(h) {
+  const s = sched(h);
+  if (s.type === 'weekly') return `${s.times}× a week`;
+  if (s.type === 'days') return s.days.length === 7 ? 'Every day' : s.days.slice().sort().map(d => DAY_SHORT[d]).join(' · ');
+  return 'Every day';
 }
+// Check-offs so far in the week containing day n (for "X times a week" habits).
+function weekCount(h, n) {
+  const w = weekStart(n);
+  return h.done.filter(k => { const d = dayNum(k); return d >= w && d < w + 7; }).length;
+}
+// Days of the week around n that the habit is running (not before it started, not paused). Scales weekly targets.
+function activeDaysInWeek(h, n, start) {
+  let a = 0;
+  for (let d = weekStart(n); d < weekStart(n) + 7; d++) if (d >= start && !isPausedOn(h, d)) a++;
+  return a;
+}
+const weeklyTarget = (h, n, start) => Math.ceil(sched(h).times * activeDaysInWeek(h, n, start) / 7);
+
+// Current and best streak. Daily / specific-day habits count due days (rest days and paused days are skipped,
+// today only counts once it's done); weekly habits count weeks that hit the target (this week only once it's hit).
+function streaks(h) {
+  const today = todayNum(), start = startOf(h), set = new Set(h.done.map(dayNum));
+  let run = 0, best = 0;
+  if (sched(h).type === 'weekly') {
+    for (let w = weekStart(start); w <= today; w += 7) {
+      const target = weeklyTarget(h, w, start);
+      if (!target) continue;
+      const count = weekCount(h, w);
+      if (count >= target) best = Math.max(best, ++run);
+      else if (w !== weekStart(today)) run = 0;
+    }
+    return { current: run, best, unit: 'week' };
+  }
+  for (let d = start; d <= today; d++) {
+    if (isPausedOn(h, d) || !isDueOn(h, d)) continue;
+    if (set.has(d)) best = Math.max(best, ++run);
+    else if (d !== today) run = 0;
+  }
+  return { current: run, best, unit: 'day' };
+}
+const streak = h => streaks(h).current;
+const streakLabel = h => { const s = streaks(h); return s.current ? `🔥 ${s.current}${s.unit === 'week' ? ' wk' : ''}` : ''; };
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -262,35 +316,60 @@ function goToPage(i) { pagesEl.scrollTo({ left: i * pagesEl.clientWidth, behavio
 function render() {
   const today = ymd(daysAgo(0));
   $('today').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  const total = state.habits.length;
-  const doneCount = state.habits.filter(h => h.done.includes(today)).length;
-  $('progress').textContent = total ? `${doneCount} of ${total} done · hold a circle to edit` : '';
+  const tn = todayNum();
+  const shown = state.habits.filter(isActive);
+  // "Due today": daily habits, specific-day habits scheduled today, weekly habits whose target isn't met yet
+  // (or that were checked off today).
+  const due = shown.filter(h => {
+    const t = sched(h).type;
+    if (t === 'days') return isDueOn(h, tn) || h.done.includes(today);
+    if (t === 'weekly') return h.done.includes(today) || weekCount(h, tn) < weeklyTarget(h, tn, startOf(h));
+    return true;
+  });
+  const doneCount = due.filter(h => h.done.includes(today)).length;
+  $('progress').textContent = shown.length ? `${doneCount} of ${due.length} done · hold to edit` : '';
+  renderBackupNudge();
 
-  const shown = state.habits;
   const keep = currentPage();
   pagesEl.replaceChildren();
 
   if (!shown.length) {
-    const p = el('div', 'page empty', 'Tap + to add your first habit.');
+    const p = el('div', 'page empty', state.habits.length ? 'All your habits are paused or finished. Open ⚙ Settings to bring one back.' : 'Tap + to add your first habit.');
     pagesEl.append(p);
   }
   for (let start = 0; start < shown.length; start += PER_PAGE) {
     const page = el('div', 'page');
     for (const h of shown.slice(start, start + PER_PAGE)) {
-      const done = h.done.includes(today);
+      const doneToday = h.done.includes(today);
+      const type = sched(h).type;
+      // Weekly habits fill the ring over the week and count as done once the target is hit;
+      // the others are done when checked off today.
+      let p = doneToday ? 100 : 0, done = doneToday, sub = '';
+      if (type === 'weekly') {
+        const target = weeklyTarget(h, tn, startOf(h)) || 1, count = weekCount(h, tn);
+        p = Math.min(100, count / target * 100); done = count >= target;
+        sub = `${count}/${target} this week`;
+      } else if (type === 'days' && !isDueOn(h, tn) && !doneToday) {
+        sub = 'Rest day';
+      }
       // The habit just tapped starts in its old state so the ring can animate to the new one.
       const animate = h.id === justToggled;
-      const cell = el('button', 'habit' + (done !== animate ? ' done' : ''));
-      if (animate) requestAnimationFrame(() => requestAnimationFrame(() => cell.classList.toggle('done', done)));
-      cell.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}`);
+      const cell = el('button', 'habit');
+      const setState = (pp, dd) => { cell.style.setProperty('--p', pp); cell.classList.toggle('done', dd); cell.classList.toggle('part', pp > 0 && pp < 100); };
+      if (animate) {
+        const before = type === 'weekly' ? Math.min(100, (weekCount(h, tn) + (doneToday ? -1 : 1)) / (weeklyTarget(h, tn, startOf(h)) || 1) * 100) : 100 - p;
+        setState(before, before >= 100);
+        requestAnimationFrame(() => requestAnimationFrame(() => setState(p, done)));
+      } else setState(p, done);
+      if (sub === 'Rest day') cell.classList.add('rest');
+      cell.setAttribute('aria-label', `${h.name}, ${done ? 'done' : 'not done'}${sub ? ', ' + sub : ''}`);
       const ring = el('span', 'ring');
       ring.innerHTML = '<svg class="prog" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="48"/><circle class="arc" cx="50" cy="50" r="48" pathLength="100"/></svg>';
       ring.insertAdjacentHTML('beforeend', faceHTML(h));
       ring.append(el('span', 'ok', '✓'));
       const label = el('span', 'label');
       label.append(el('span', 'n', h.name));
-      const s = streak(h);
-      const info = [h.unit ? `${fmt(h.goal)} ${h.unit}` : '', s ? `🔥 ${s}` : ''].filter(Boolean).join(' · ');
+      const info = [sub, h.unit ? `${fmt(h.goal)} ${h.unit}` : '', streakLabel(h)].filter(Boolean).join(' · ');
       if (info) label.append(el('span', 'g', info));
       cell.append(ring, label);
       pressable(cell, () => { justToggled = h.id; toggle(h, today); justToggled = null; }, () => openEditSheet(h));
@@ -344,17 +423,49 @@ function closeSheet() {
 }
 $('sheet').onclick = e => { if (e.target.id === 'sheet') closeSheet(); };
 
-// Name, then optionally a daily goal in some unit (e.g. 2 L). Suggested units follow the name as you type.
+// "How often": every day, specific weekdays, or N times a week. onChange gets the new schedule.
+function schedulePicker(box, s, onChange) {
+  const cur = s || { type: 'daily' };
+  const seg = (t, label) => `<button class="chip${cur.type === t ? ' sel' : ''}" data-t="${t}">${label}</button>`;
+  box.innerHTML = `
+    <div class="field">How often</div>
+    <div class="chips">${seg('daily', 'Every day')}${seg('days', 'Specific days')}${seg('weekly', 'Times a week')}</div>
+    ${cur.type === 'days' ? `<div class="weekdays">${DAY_LETTERS.map((l, i) => `<button class="wd${cur.days.includes(i) ? ' on' : ''}" data-d="${i}" aria-label="${DAY_SHORT[i]}">${l}</button>`).join('')}</div>` : ''}
+    ${cur.type === 'weekly' ? `<div class="stepper"><button class="chip" data-step="-1" aria-label="Fewer">−</button><b>${cur.times}× a week</b><button class="chip" data-step="1" aria-label="More">+</button></div>` : ''}`;
+  const set = v => { onChange(v); schedulePicker(box, v, onChange); };
+  box.querySelectorAll('[data-t]').forEach(b => b.onclick = () => {
+    const t = b.dataset.t;
+    set(t === 'days' ? { type: 'days', days: cur.type === 'days' ? cur.days : [0, 2, 4] }
+      : t === 'weekly' ? { type: 'weekly', times: cur.type === 'weekly' ? cur.times : 3 } : { type: 'daily' });
+  });
+  box.querySelectorAll('[data-d]').forEach(b => b.onclick = () => {
+    const d = +b.dataset.d, days = cur.days.includes(d) ? cur.days.filter(x => x !== d) : [...cur.days, d];
+    if (days.length) set({ type: 'days', days: days.sort((a, c) => a - c) });
+  });
+  box.querySelectorAll('[data-step]').forEach(b => b.onclick = () => set({ type: 'weekly', times: Math.min(6, Math.max(1, cur.times + +b.dataset.step)) }));
+}
+const setSchedule = (h, v) => { if (v.type === 'daily') delete h.schedule; else h.schedule = v; };
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  showAnimated(t);
+  clearTimeout(t.timer);
+  t.timer = setTimeout(() => hideAnimated(t), 2600);
+}
+
+// Name, how often, then optionally an icon and a goal in some unit (e.g. 2 L). Suggestions follow the name as you type.
 function openAddSheet() {
-  const pick = { mode: 'none', goal: '', unit: '', auto: true, face: {} };
+  const pick = { mode: 'none', goal: '', unit: '', auto: true, face: {}, schedule: { type: 'daily' } };
   openSheet(`
     <h2>New habit</h2>
     <label class="field">Name<span class="goal"><input id="hname" maxlength="40" placeholder="e.g. Drink water" autocomplete="off"></span></label>
+    <div id="freq"></div>
     <div id="emo"></div>
     <div id="opts"></div>
     <div class="actions"><button class="ghost" id="cancel">Cancel</button><button class="primary" id="save">Add habit</button></div>
-    <div class="links">Backup: <button id="export">Export</button> · <button id="import">Import</button> · version 21</div>
   `, () => {});
+  schedulePicker($('freq'), pick.schedule, v => { pick.schedule = v; });
   const name = $('hname');
   const drawEmoji = () => iconPicker($('emo'), name.value, pick.face, f => { pick.face = f; drawEmoji(); });
   const unitsFor = n => (PRESETS.find(p => p.match.test(n)) || { units: [] }).units;
@@ -370,7 +481,7 @@ function openAddSheet() {
         ${chip('other', 'Other unit…')}
       </div>
       ${pick.mode === 'none' ? '' : `
-      <label class="field">Daily goal
+      <label class="field">Goal
         <span class="goal">
           <input id="goal" type="text" inputmode="decimal" autocomplete="off" value="${esc(String(pick.goal))}" placeholder="e.g. 10">
           ${pick.mode === 'other'
@@ -403,8 +514,6 @@ function openAddSheet() {
     drawEmoji();
   };
   $('cancel').onclick = closeSheet;
-  $('export').onclick = exportData;
-  $('import').onclick = () => $('file').click();
   $('save').onclick = () => {
     const n = name.value.trim();
     if (!n) return name.focus();
@@ -412,6 +521,7 @@ function openAddSheet() {
     const h = { id: 'h_' + Date.now().toString(36), name: n, created: ymd(daysAgo(0)), done: [],
       color: last ? (last.color + 1) % PALETTE.length : 0 };
     setFace(h, pick.face);
+    setSchedule(h, pick.schedule);
     if (pick.mode !== 'none') {
       const g = parseFloat(String(pick.goal).replace(',', '.'));
       const u = pick.mode === 'other' ? pick.unit.trim() : pick.mode;
@@ -422,7 +532,7 @@ function openAddSheet() {
     state.habits.push(h);
     closeSheet();
     save();
-    goToPage(Math.floor((state.habits.length - 1) / PER_PAGE));
+    goToPage(Math.floor((state.habits.filter(isActive).length - 1) / PER_PAGE));
   };
   drawOpts();
   drawEmoji();
@@ -456,30 +566,36 @@ function openThemeSheet() {
     };
   }, { peek: true });
 }
-$('theme').onclick = openThemeSheet;
 
-// Holding a circle: rename, fix any of the past year's days, change the icon, or delete.
+
+// Holding a circle: pause / finish / delete, rename, change how often, fix any of the past year's days, change the icon.
 const HISTORY_DAYS = 365;
 function openEditSheet(h) {
   const color = PALETTE[h.color % PALETTE.length];
   const streakText = () => {
-    const n = streak(h);
-    return `${h.unit ? `${fmt(h.goal)} ${esc(h.unit)} a day · ` : ''}${n ? `🔥 ${n} day streak` : 'No streak yet'}`;
+    const { current, unit } = streaks(h);
+    return `${scheduleText(h)}${h.unit ? ` · ${fmt(h.goal)} ${esc(h.unit)}` : ''} · ${current ? `🔥 ${current} ${unit} streak` : 'No streak yet'}`;
   };
   // Oldest on the left, today on the far right; a month label marks the 1st and the first chip.
   const days = Array.from({ length: HISTORY_DAYS }, (_, i) => daysAgo(HISTORY_DAYS - 1 - i)).map((d, i) => {
     const key = ymd(d);
     const month = i === 0 || d.getDate() === 1 ? d.toLocaleDateString(undefined, { month: 'short' }) : '';
-    return `<button class="day${h.done.includes(key) ? ' on' : ''}" data-day="${key}"><i>${month}</i>${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
+    return `<button class="day${h.done.includes(key) ? ' on' : ''}${isDueOn(h, dayNum(key)) ? '' : ' rest'}" data-day="${key}"><i>${month}</i>${d.toLocaleDateString(undefined, { weekday: 'short' })}<b>${d.getDate()}</b></button>`;
   }).join('');
   openSheet(`
     <div class="title-row"><span id="edit-emoji" class="face">${h.icon || h.emoji ? faceHTML(h) : ''}</span>
       <input id="rename" class="title-input" maxlength="40" value="${esc(h.name)}" aria-label="Habit name" autocomplete="off" enterkeyhint="done"><span class="pen" aria-hidden="true">✎</span></div>
     <p class="sub" id="edit-streak">${streakText()}</p>
+    <div class="top-actions">
+      <button class="act" id="pause">${iconSvg('ui-pause')}<span>Pause</span></button>
+      <button class="act" id="finish">${iconSvg('ui-archive')}<span>Finish</span></button>
+      <button class="act danger" id="del">${iconSvg('trash')}<span>Delete</span></button>
+    </div>
+    <div id="freq"></div>
     <p class="sub">Tap a day to mark it done or not done. Swipe for earlier days.</p>
     <div class="days" style="--c:${color}">${days}</div>
     <div id="emo"></div>
-    <div class="actions"><button class="danger" id="del">Delete</button><button class="primary" id="close">Done</button></div>
+    <div class="actions"><button class="primary" id="close">Done</button></div>
   `, panel => {
     const strip = panel.querySelector('.days');
     strip.scrollLeft = strip.scrollWidth;
@@ -509,9 +625,30 @@ function openEditSheet(h) {
     });
     drawEmoji();
 
+    schedulePicker($('freq'), sched(h), v => {
+      setSchedule(h, v);
+      save();
+      $('edit-streak').innerHTML = streakText();
+      strip.querySelectorAll('.day').forEach(b => b.classList.toggle('rest', !isDueOn(h, dayNum(b.dataset.day))));
+    });
+
     $('close').onclick = () => { commit(); closeSheet(); };
+    $('pause').onclick = () => {
+      commit();
+      pauseHabit(h);
+      closeSheet();
+      toast(`"${h.name}" paused. Resume it in ⚙ Settings.`);
+    };
+    $('finish').onclick = () => {
+      if (!confirm(`Finish "${h.name}"? It's hidden but keeps its history, and you can restore it in Settings.`)) return;
+      commit();
+      h.archived = ymd(daysAgo(0));
+      closeSheet();
+      save();
+      toast(`"${h.name}" finished. Nice work.`);
+    };
     $('del').onclick = () => {
-      if (confirm(`Delete "${h.name}" and its history?`)) {
+      if (confirm(`Delete "${h.name}" and its history? This can't be undone.`)) {
         state.habits = state.habits.filter(x => x !== h);
         closeSheet();
         save();
@@ -523,45 +660,54 @@ function openEditSheet(h) {
 // ---- Stats ----
 // A day counts toward a habit from the day it was created (or its earliest logged day, if backfilled).
 // Today only counts once it's done, so the rate doesn't drop every morning.
-const dayNum = key => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
-const keyOf = n => new Date(n * 864e5).toISOString().slice(0, 10);
-const startOf = h => Math.min(dayNum(h.created || ymd(daysAgo(0))), ...h.done.map(dayNum));
-function longestStreak(h) {
-  const days = [...new Set(h.done.map(dayNum))].sort((a, b) => a - b);
-  let best = 0, run = 0;
-  days.forEach((d, i) => { run = i && d === days[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run); });
-  return best;
-}
+const longestStreak = h => streaks(h).best;
 const RANGES = [['week', 'Week', 7, 'last 7 days'], ['month', 'Month', 30, 'last 30 days'], ['year', 'Year', 365, 'last 12 months'], ['all', 'All time', 0, 'all time']];
 const statsView = { habit: 'all', range: 'month' };
 
+// Per day, how many check-offs were expected ("possible") and made ("done") across the habits.
+// Rest days and paused days expect nothing. A weekly habit expects target/7 a day and only its first
+// `target` check-offs in a week count, so bonus sessions can't push the rate past 100%.
 function computeStats(habits, range) {
-  const today = dayNum(ymd(daysAgo(0)));
+  const today = todayNum();
   const earliest = Math.min(...habits.map(startOf));
   const len = RANGES.find(r => r[0] === range)[2];
   const from = len ? Math.max(today - len + 1, earliest) : earliest;
   const days = [];
-  let done = 0, possible = 0, perfect = 0;
+  let done = 0, possible = 0;
   const weekday = Array.from({ length: 7 }, () => ({ done: 0, possible: 0 }));
+  const info = habits.map(h => ({ h, start: startOf(h), set: new Set(h.done.map(dayNum)), weekly: sched(h).type === 'weekly', used: new Map() }));
   for (let d = from; d <= today; d++) {
-    const key = keyOf(d);
     let dd = 0, dp = 0;
-    for (const h of habits) {
-      if (d < startOf(h)) continue;
-      const hit = h.done.includes(key);
-      if (d === today && !hit) continue;
-      dp++; if (hit) dd++;
+    for (const x of info) {
+      const { h, start, set } = x;
+      if (d < start || isPausedOn(h, d)) continue;
+      const hit = set.has(d);
+      if (x.weekly) {
+        const target = weeklyTarget(h, d, start), active = activeDaysInWeek(h, d, start);
+        if (d === today && !hit) continue;
+        dp += active ? target / active : 0;
+        if (hit) {
+          const w = weekStart(d), used = x.used.get(w) ?? h.done.filter(k => { const n = dayNum(k); return n >= w && n < d; }).length;
+          x.used.set(w, used + 1);
+          if (used < target) dd++;
+        }
+      } else {
+        if (!isDueOn(h, d)) continue;
+        if (d === today && !hit) continue;
+        dp++; if (hit) dd++;
+      }
     }
-    const wd = (new Date(d * 864e5).getUTCDay() + 6) % 7; // Monday = 0
+    const wd = weekdayOf(d);
     weekday[wd].done += dd; weekday[wd].possible += dp;
-    if (dp && dd === dp && (d !== today || dp === habits.filter(h => d >= startOf(h)).length)) perfect++;
     done += dd; possible += dp;
-    days.push({ d, key, done: dd, possible: dp });
+    days.push({ d, key: keyOf(d), done: dd, possible: dp });
   }
-  return { days, done, possible, perfect, weekday, from, today };
+  return { days, done, possible, weekday, from, today };
 }
 
-const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+// Weekly habits make 'possible' fractional, and doing a week's sessions early can briefly beat it: cap at 100%.
+const pct = (a, b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
+const rnd = n => Math.round(n);
 const fmtDay = (d, opts) => new Date(d * 864e5).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
 
 // Trend points: the week shows each day's rate; longer ranges use a 7-day rolling rate so the line
@@ -572,8 +718,8 @@ function trendPoints(st, range) {
     let dn = 0, ps = 0;
     for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += st.days[j].done; ps += st.days[j].possible; }
     const date = fmtDay(x.d, { weekday: 'short', month: 'short', day: 'numeric', year: range === 'all' || range === 'year' ? 'numeric' : undefined });
-    return { v: ps ? dn / ps * 100 : null,
-      tip: ps ? `${date}: ${Math.round(dn / ps * 100)}%${win > 1 ? ' (last 7 days)' : ` (${dn} of ${ps})`}` : `${date}: nothing to do yet` };
+    return { v: ps ? Math.min(100, dn / ps * 100) : null,
+      tip: ps ? `${date}: ${pct(dn, ps)}%${win > 1 ? ' (last 7 days)' : ` (${rnd(dn)} of ${rnd(ps)})`}` : `${date}: nothing to do yet` };
   });
 }
 
@@ -652,7 +798,7 @@ function barChart(items) {
     <div class="plot">
       <div class="grid"><span>100%</span><span>50%</span><span>0%</span></div>
       <div class="bars">${items.map(b => `
-        <button class="bar" data-tip="${esc(b.long)}: ${b.possible ? `${pct(b.done, b.possible)}% (${b.done} of ${b.possible})` : 'nothing to do yet'}">
+        <button class="bar" data-tip="${esc(b.long)}: ${b.possible ? `${pct(b.done, b.possible)}% (${rnd(b.done)} of ${rnd(b.possible)})` : 'nothing to do yet'}">
           <span class="fill${b.possible ? '' : ' none'}" style="height:${b.possible ? Math.max(2, pct(b.done, b.possible)) : 0}%"></span>
           <span class="tick">${esc(b.short)}</span>
         </button>`).join('')}
@@ -664,7 +810,7 @@ function barChart(items) {
 
 function openStats() {
   const view = $('stats');
-  const habits = state.habits;
+  const habits = state.habits.filter(h => !h.archived);
   if (!habits.length) {
     view.innerHTML = `<div class="stats-in"><div class="stats-top"><button class="round" id="stats-close" aria-label="Back">‹</button><h1>Stats</h1></div>
       <p class="stats-empty">Add a habit to see your stats.</p></div>`;
@@ -716,23 +862,24 @@ function openStats() {
 }
 
 function drawBody() {
-  const habits = state.habits;
+  const habits = state.habits.filter(h => !h.archived);
   const one = habits.find(h => h.id === statsView.habit);
   const st = computeStats(one ? [one] : habits, statsView.range);
   const range = RANGES.find(r => r[0] === statsView.range);
 
+  const wk = h => sched(h).type === 'weekly' ? '<small> wk</small>' : '';
   const nums = one ? [
     [`${pct(st.done, st.possible)}%`, 'completion'],
-    [`${st.done}<small>/${st.possible}</small>`, 'days done'],
+    [`${rnd(st.done)}<small>/${rnd(st.possible)}</small>`, sched(one).type === 'weekly' ? 'check-offs' : 'days done'],
     [one.done.length, 'all-time total'],
-    [streak(one), 'current streak'],
-    [longestStreak(one), 'longest streak'],
+    [`${streak(one)}${wk(one)}`, 'current streak'],
+    [`${longestStreak(one)}${wk(one)}`, 'longest streak'],
   ] : (() => {
     const best = habits.map(h => [longestStreak(h), h]).sort((a, b) => b[0] - a[0])[0];
     return [
       [`${pct(st.done, st.possible)}%`, 'completion'],
-      [`${st.done}<small>/${st.possible}</small>`, 'check-offs'],
-      [best[0], `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
+      [`${rnd(st.done)}<small>/${rnd(st.possible)}</small>`, 'check-offs'],
+      [`${best[0]}${best[0] ? wk(best[1]) : ''}`, `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
     ];
   })();
 
@@ -778,13 +925,91 @@ function closeStats() { hideAnimated($('stats')); }
 $('stats-btn').onclick = openStats;
 // Toolbar icons use the same one-color set as the habits, so they follow the theme's text color.
 $('stats-btn').insertAdjacentHTML('afterbegin', iconSvg('chart-line-up'));
-$('theme').innerHTML = iconSvg('palette');
+$('settings').innerHTML = iconSvg('ui-gear-six');
+
+// Pausing starts an open-ended pause today; resuming closes it yesterday (or drops it if it started today).
+function pauseHabit(h) {
+  (h.pauses = h.pauses || []).push({ from: ymd(daysAgo(0)), to: null });
+  save();
+}
+function resumeHabit(h) {
+  const p = (h.pauses || []).find(x => !x.to);
+  if (!p) return;
+  if (p.from === ymd(daysAgo(0))) h.pauses = h.pauses.filter(x => x !== p);
+  else p.to = ymd(daysAgo(1));
+  if (!h.pauses.length) delete h.pauses;
+  save();
+}
+
+// Days since the last export, counted from the first habit if there's never been one.
+function daysSinceBackup() {
+  if (!state.habits.length) return 0;
+  const ref = state.lastBackup ? dayNum(state.lastBackup) : Math.min(...state.habits.map(startOf));
+  return todayNum() - ref;
+}
+function backupText() {
+  if (!state.lastBackup) return 'Never backed up.';
+  const n = daysSinceBackup();
+  return `Last backup: ${n === 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`}.`;
+}
+function renderBackupNudge() { $('nudge').hidden = daysSinceBackup() < 14; }
+
+function openSettings() {
+  const draw = () => {
+    const panelEl = $('sheet').querySelector('.panel'), keep = panelEl.scrollTop;
+    const active = state.habits.filter(isActive);
+    const paused = state.habits.filter(h => !h.archived && isPaused(h));
+    const finished = state.habits.filter(h => h.archived);
+    const row = (h, btns) => `<div class="srow"><span class="sface">${faceHTML(h)}</span><span class="sname">${esc(h.name)}<small>${scheduleText(h)}</small></span>${btns}</div>`;
+    openSheet(`
+      <h2>Settings</h2>
+      <button class="srow tap" id="colors"><span class="sface">${iconSvg('palette')}</span><span class="sname">Colors<small>${THEMES[themeIndex][0]}</small></span><span class="chev">›</span></button>
+      <h3 class="sh">Order</h3>
+      ${active.length ? active.map((h, i) => row(h, `<button class="mini-btn" data-up="${h.id}"${i ? '' : ' disabled'} aria-label="Move ${esc(h.name)} up">${iconSvg('ui-caret-up')}</button><button class="mini-btn" data-down="${h.id}"${i < active.length - 1 ? '' : ' disabled'} aria-label="Move ${esc(h.name)} down">${iconSvg('ui-caret-down')}</button>`)).join('') : '<p class="sub">No active habits.</p>'}
+      ${paused.length ? '<h3 class="sh">Paused</h3>' + paused.map(h => row(h, `<button class="chip" data-resume="${h.id}">Resume</button>`)).join('') : ''}
+      ${finished.length ? '<h3 class="sh">Finished</h3>' + finished.map(h => row(h, `<button class="chip" data-restore="${h.id}">Restore</button><button class="mini-btn danger" data-delete="${h.id}" aria-label="Delete ${esc(h.name)}">${iconSvg('trash')}</button>`)).join('') : ''}
+      <h3 class="sh">Backup</h3>
+      <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
+      <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
+      <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
+      <div class="links">Version 22</div>
+    `, panel => {
+      panel.scrollTop = keep;
+      const byId = id => state.habits.find(h => h.id === id);
+      // Swap with the neighbouring active habit in the stored order (paused/finished ones keep their place).
+      const move = (h, dir) => {
+        const list = state.habits.filter(isActive), j = list.indexOf(h) + dir;
+        if (j < 0 || j >= list.length) return;
+        const a = state.habits.indexOf(h), b = state.habits.indexOf(list[j]);
+        [state.habits[a], state.habits[b]] = [state.habits[b], state.habits[a]];
+        save(); draw();
+      };
+      panel.querySelectorAll('[data-up]').forEach(b => b.onclick = () => move(byId(b.dataset.up), -1));
+      panel.querySelectorAll('[data-down]').forEach(b => b.onclick = () => move(byId(b.dataset.down), 1));
+      panel.querySelectorAll('[data-resume]').forEach(b => b.onclick = () => { resumeHabit(byId(b.dataset.resume)); draw(); });
+      panel.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { delete byId(b.dataset.restore).archived; save(); draw(); });
+      panel.querySelectorAll('[data-delete]').forEach(b => b.onclick = () => {
+        const h = byId(b.dataset.delete);
+        if (confirm(`Delete "${h.name}" and its history? This can't be undone.`)) { state.habits = state.habits.filter(x => x !== h); save(); draw(); }
+      });
+      $('colors').onclick = openThemeSheet;
+      $('export').onclick = () => { exportData(); draw(); };
+      $('import').onclick = () => $('file').click();
+      $('close').onclick = closeSheet;
+    });
+  };
+  draw();
+}
+$('settings').onclick = openSettings;
+$('nudge').onclick = openSettings;
 
 function exportData() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
   a.download = `habits-${ymd(daysAgo(0))}.json`;
   a.click();
+  state.lastBackup = ymd(daysAgo(0));
+  save();
   URL.revokeObjectURL(a.href);
 }
 $('file').onchange = async e => {
@@ -809,6 +1034,9 @@ window.addEventListener('resize', () => goToPage(currentPage()));
 
 // Always check the server for a new sw.js, and reload once when a new version takes over,
 // so a deploy shows up on the next open instead of waiting on stale caches.
+// Ask the browser to keep this site's storage instead of clearing it when space runs low.
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
