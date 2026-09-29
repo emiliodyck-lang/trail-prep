@@ -784,17 +784,45 @@ const rnd = n => Math.round(n);
 
 // Trend points: the week shows each day's rate; longer ranges use a 7-day rolling rate so the line
 // moves like a stock chart instead of jumping between 0% and 100%.
-// `ext` is computed from 6 days before the period, so each point of the period has a full 7-day window.
-function trendPoints(ext, range, from) {
-  const win = range === 'week' ? 1 : 7;
-  return ext.days.map((x, i) => {
-    if (x.d < from) return null;
-    let dn = 0, ps = 0;
-    for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += ext.days[j].done; ps += ext.days[j].possible; }
-    const date = fmtDay(x.d, { weekday: 'short', month: 'short', day: 'numeric', year: range === 'all' || range === 'year' ? 'numeric' : undefined });
-    return { v: ps ? Math.min(100, dn / ps * 100) : null,
-      tip: ps ? `${date}: ${pct(dn, ps)}%${win > 1 ? ' (last 7 days)' : ` (${rnd(dn)} of ${rnd(ps)})`}` : `${date}: nothing to do yet` };
-  }).filter(Boolean);
+// The completion line covers exactly the period, split into days, weeks or months; each point is that
+// chunk's completion %. Week and Month go by day, Year by month; longer or custom ranges pick by length.
+function trendBuckets(st, range) {
+  const span = st.to - st.from + 1;
+  const unit = range === 'week' || range === 'month' ? 'day' : range === 'year' ? 'month'
+    : span <= 31 ? 'day' : span <= 120 ? 'week' : 'month';
+  const bucketOf = d => unit === 'day' ? d : unit === 'week' ? weekStart(d) : yearOf(d) * 12 + monthOf(d);
+  const map = new Map();
+  for (const x of st.days) {
+    const k = bucketOf(x.d);
+    if (!map.has(k)) map.set(k, { d: x.d, done: 0, possible: 0, days: 0 });
+    const b = map.get(k); b.done += x.done; b.possible += x.possible; b.days++;
+  }
+  const buckets = [...map.values()];
+  // A rolling window can start with a sliver of a week or month (e.g. just Sep 30): fold it into the next chunk.
+  if (unit !== 'day' && buckets.length > 1 && buckets[0].days < (unit === 'month' ? 7 : 3)) {
+    const [a, b] = buckets; b.d = a.d; b.done += a.done; b.possible += a.possible; b.days += a.days; buckets.shift();
+  }
+  const name = d => unit === 'day' ? fmtDay(d, { weekday: 'short', month: 'short', day: 'numeric' })
+    : unit === 'week' ? `Week of ${fmtDay(weekStart(d), { month: 'short', day: 'numeric' })}` : fmtDay(d, { month: 'long', year: 'numeric' });
+  const short = d => unit === 'month' ? fmtDay(d, { month: 'short', year: 'numeric' }) : fmtDay(d, { month: 'short', day: 'numeric' });
+  return {
+    unit,
+    points: buckets.map(b => ({ v: b.possible ? Math.min(100, b.done / b.possible * 100) : null,
+      tip: b.possible ? `${name(b.d)}: ${pct(b.done, b.possible)}% (${rnd(b.done)} of ${rnd(b.possible)})` : `${name(b.d)}: nothing to do` })),
+    first: buckets.length ? short(buckets[0].d) : '', last: buckets.length ? (buckets[buckets.length - 1].d === todayNum() ? 'Today' : short(buckets[buckets.length - 1].d)) : '',
+  };
+}
+
+// Today hour by hour: how much of today's habits was done by each hour, up to now. Check-offs without a
+// saved time count from now.
+function dayProgress(due, key) {
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const mins = due.filter(h => h.done.includes(key)).map(h => (h.times && h.times[key] != null ? h.times[key] : nowMin));
+  return Array.from({ length: 25 }, (_, hr) => {
+    if (hr * 60 > nowMin + 60) return { v: null, tip: '' };
+    const n = mins.filter(m => m < hr * 60).length;
+    return { v: due.length ? n / due.length * 100 : null, tip: `By ${hourName(hr)}: ${n} of ${due.length} done (${pct(n, due.length)}%)` };
+  });
 }
 
 function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
@@ -841,7 +869,7 @@ function bindLineChart(root, points) {
     const left = n === 1 ? 50 : i / (n - 1) * 100;
     hair.hidden = false; hair.style.left = left + '%';
     dot.hidden = p.v == null; if (p.v != null) { dot.style.left = left + '%'; dot.style.top = (100 - p.v) + '%'; }
-    out.textContent = p.tip;
+    if (p.tip) out.textContent = p.tip;
   };
   box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); at(e); });
   box.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || box.hasPointerCapture(e.pointerId)) at(e); });
@@ -997,13 +1025,10 @@ function drawBody() {
   const bindPick = () => { const b = $('p-change'); if (b) b.onclick = () => pickCustom(range); };
 
   const isDay = range === 'day';
-  const cs = isDay ? computeStats(sel, weekStart(p.from), weekStart(p.from) + 6) : st;   // charts' period
-  const ext = computeStats(sel, (isDay ? cs.from : p.from) - 6, isDay ? cs.to : p.to);
-  const daily = isDay || range === 'week' || (range === 'custom' && p.to - p.from < 14);
-  const pts = trendPoints(ext, daily ? 'week' : range, cs.from);
-  const yr = range === 'all' || range === 'year' || (range === 'custom' && yearOf(p.from) !== yearOf(today)) ? { year: 'numeric' } : {};
-  const first = fmtDay(cs.from, { month: 'short', day: 'numeric', ...yr });
-  const last = cs.to === today ? 'Today' : fmtDay(cs.to, { month: 'short', day: 'numeric', ...yr });
+  const cs = isDay ? computeStats(sel, weekStart(p.from), weekStart(p.from) + 6) : st;   // day-of-week bars' period
+  const trend = isDay ? { unit: 'hour', points: dayProgress(dayDue, keyOf(p.from)) } : trendBuckets(st, range);
+  const pts = trend.points.some(x => x.v != null) ? trend.points : [];
+  const xLabels = isDay ? ['12a', '6a', '12p', '6p', '12a'] : [trend.first, trend.last];
 
   const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const wd = cs.weekday.map((w, i) => ({ ...w, short: names[i][0], long: isDay ? fmtDay(cs.from + i, { weekday: 'long', month: 'short', day: 'numeric' }) : names[i] }));
@@ -1019,8 +1044,8 @@ function drawBody() {
     ${nav}
     ${numsHTML}
     <hr class="sep">
-    <h3>${isDay ? 'This week' : daily ? 'Each day' : 'Trend · 7-day average'}</h3>
-    ${pts.length ? lineChart(pts, [first, last]) : '<p class="note">Nothing to show for this period yet.</p>'}
+    <h3>${isDay ? 'Today, hour by hour' : `Completion by ${trend.unit}`}</h3>
+    ${pts.length ? lineChart(pts, xLabels) : `<p class="note">${isDay ? 'Nothing due today.' : 'Nothing to show for this period yet.'}</p>`}
     <hr class="sep">
     <div class="duo">
       <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${isDay ? `${fmtDay(cs.from, { month: 'short', day: 'numeric' })} – ${fmtDay(cs.from + 6, { month: 'short', day: 'numeric' })}` : wdNote}</p></div>
@@ -1032,11 +1057,9 @@ function drawBody() {
   $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : isDay ? 'No times today' : 'No times yet';
   const bc = bindBars();
   if (isDay) {
-    // Point both week charts at today.
-    const i = p.from - cs.from, bar = bc.querySelectorAll('.bar')[i];
+    // Point the week bars at today.
+    const bar = bc.querySelectorAll('.bar')[p.from - cs.from];
     bar.classList.add('on'); bc.querySelector('.readout').textContent = bar.dataset.tip;
-    const lc = body.querySelector('.lchart');
-    if (lc && pts[i]) lc.querySelector('.readout').textContent = pts[i].tip;
   }
 }
 function closeStats() { hideAnimated($('stats')); }
@@ -1142,7 +1165,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 28</div>
+      <div class="links">Version 29</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
