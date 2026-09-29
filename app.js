@@ -954,25 +954,77 @@ function backupText() {
 }
 function renderBackupNudge() { $('nudge').hidden = daysSinceBackup() < 14; }
 
+// Drag rows of `list` by their .grip. The dragged row follows the finger, the rows it passes slide out of
+// the way, and dragging near the top/bottom of `scroller` scrolls it. onDrop gets the ids in their new order.
+function dragToReorder(list, scroller, onDrop) {
+  list.querySelectorAll('.grip').forEach(grip => grip.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    const row = grip.closest('.srow'), rows = [...list.querySelectorAll('.srow')];
+    const from = rows.indexOf(row), step = row.offsetHeight;
+    const y0 = e.clientY, s0 = scroller.scrollTop;
+    let to = from, lastY = e.clientY, raf = 0;
+    grip.setPointerCapture(e.pointerId);
+    row.classList.add('dragging');
+    list.classList.add('sorting');
+    if (navigator.vibrate) navigator.vibrate(15);
+
+    const layout = () => {
+      const dy = lastY - y0 + (scroller.scrollTop - s0);
+      row.style.transform = `translateY(${dy}px)`;
+      to = Math.max(0, Math.min(rows.length - 1, from + Math.round(dy / step)));
+      rows.forEach((r, i) => {
+        if (r === row) return;
+        const shift = from < to && i > from && i <= to ? -step : from > to && i >= to && i < from ? step : 0;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+    // Keep scrolling while the finger rests near an edge.
+    const edgeScroll = () => {
+      const box = scroller.getBoundingClientRect();
+      const v = lastY < box.top + 70 ? -8 : lastY > box.bottom - 70 ? 8 : 0;
+      if (v) { scroller.scrollTop += v; layout(); }
+      raf = requestAnimationFrame(edgeScroll);
+    };
+    raf = requestAnimationFrame(edgeScroll);
+
+    const onMove = ev => { lastY = ev.clientY; layout(); };
+    const onEnd = () => {
+      cancelAnimationFrame(raf);
+      grip.removeEventListener('pointermove', onMove);
+      grip.removeEventListener('pointerup', onEnd);
+      grip.removeEventListener('pointercancel', onEnd);
+      list.classList.remove('sorting');
+      const ids = rows.map(r => r.dataset.id);
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      onDrop(ids);
+    };
+    grip.addEventListener('pointermove', onMove);
+    grip.addEventListener('pointerup', onEnd);
+    grip.addEventListener('pointercancel', onEnd);
+  }));
+}
+
 function openSettings() {
   const draw = () => {
     const panelEl = $('sheet').querySelector('.panel'), keep = panelEl.scrollTop;
     const active = state.habits.filter(isActive);
     const paused = state.habits.filter(h => !h.archived && isPaused(h));
     const finished = state.habits.filter(h => h.archived);
-    const row = (h, btns) => `<div class="srow"><span class="sface">${faceHTML(h)}</span><span class="sname">${esc(h.name)}<small>${scheduleText(h)}</small></span>${btns}</div>`;
+    const GRIP = '<svg viewBox="0 0 12 20" aria-hidden="true"><circle cx="3" cy="4" r="1.8"/><circle cx="9" cy="4" r="1.8"/><circle cx="3" cy="10" r="1.8"/><circle cx="9" cy="10" r="1.8"/><circle cx="3" cy="16" r="1.8"/><circle cx="9" cy="16" r="1.8"/></svg>';
+    const row = (h, btns, drag) => `<div class="srow"${drag ? ` data-id="${h.id}"` : ''}>${drag ? `<span class="grip" aria-label="Drag to reorder ${esc(h.name)}">${GRIP}</span>` : ''}<span class="sface">${faceHTML(h)}</span><span class="sname">${esc(h.name)}<small>${scheduleText(h)}</small></span>${btns}</div>`;
     openSheet(`
       <h2>Settings</h2>
       <button class="srow tap" id="colors"><span class="sface">${iconSvg('palette')}</span><span class="sname">Colors<small>${THEMES[themeIndex][0]}</small></span><span class="chev">›</span></button>
       <h3 class="sh">Order</h3>
-      ${active.length ? active.map((h, i) => row(h, `<button class="mini-btn" data-up="${h.id}"${i ? '' : ' disabled'} aria-label="Move ${esc(h.name)} up">${iconSvg('ui-caret-up')}</button><button class="mini-btn" data-down="${h.id}"${i < active.length - 1 ? '' : ' disabled'} aria-label="Move ${esc(h.name)} down">${iconSvg('ui-caret-down')}</button>`)).join('') : '<p class="sub">No active habits.</p>'}
+      ${active.length > 1 ? '<p class="sub hint">Drag ⠿ to move, or use the arrows.</p>' : ''}
+      ${active.length ? '<div class="order">' + active.map((h, i) => row(h, `<button class="mini-btn" data-up="${h.id}"${i ? '' : ' disabled'} aria-label="Move ${esc(h.name)} up">${iconSvg('ui-caret-up')}</button><button class="mini-btn" data-down="${h.id}"${i < active.length - 1 ? '' : ' disabled'} aria-label="Move ${esc(h.name)} down">${iconSvg('ui-caret-down')}</button>`, true)).join('') + '</div>' : '<p class="sub">No active habits.</p>'}
       ${paused.length ? '<h3 class="sh">Paused</h3>' + paused.map(h => row(h, `<button class="chip" data-resume="${h.id}">Resume</button>`)).join('') : ''}
       ${finished.length ? '<h3 class="sh">Finished</h3>' + finished.map(h => row(h, `<button class="chip" data-restore="${h.id}">Restore</button><button class="mini-btn danger" data-delete="${h.id}" aria-label="Delete ${esc(h.name)}">${iconSvg('trash')}</button>`)).join('') : ''}
       <h3 class="sh">Backup</h3>
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 22</div>
+      <div class="links">Version 23</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
@@ -984,6 +1036,14 @@ function openSettings() {
         [state.habits[a], state.habits[b]] = [state.habits[b], state.habits[a]];
         save(); draw();
       };
+      // Put the active habits in a new order; paused/finished ones keep their slots in the stored list.
+      const reorder = ids => {
+        const slots = state.habits.map((x, i) => isActive(x) ? i : -1).filter(i => i >= 0);
+        ids.map(byId).forEach((x, k) => { state.habits[slots[k]] = x; });
+        save(); draw();
+      };
+      const order = panel.querySelector('.order');
+      if (order) dragToReorder(order, panel, reorder);
       panel.querySelectorAll('[data-up]').forEach(b => b.onclick = () => move(byId(b.dataset.up), -1));
       panel.querySelectorAll('[data-down]').forEach(b => b.onclick = () => move(byId(b.dataset.down), 1));
       panel.querySelectorAll('[data-resume]').forEach(b => b.onclick = () => { resumeHabit(byId(b.dataset.resume)); draw(); });

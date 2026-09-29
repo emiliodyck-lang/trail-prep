@@ -234,6 +234,13 @@
   .sname small { display:block; font-weight:400; font-size:12px; color:var(--muted); }
   .chev { color:var(--muted); font-size:22px; }
   .srow .chip { padding:7px 12px; font-size:14px; }
+  .sub.hint { margin:-2px 0 4px; font-size:13px; }
+  .grip { flex:none; width:26px; height:36px; margin-right:-6px; display:grid; place-items:center; color:var(--muted); cursor:grab; touch-action:none; -webkit-user-select:none; user-select:none; }
+  .grip svg { width:12px; height:20px; fill:currentColor; }
+  .order .srow { position:relative; background:var(--card); }
+  .order.sorting .srow { transition:transform .18s ease; }
+  .order .srow.dragging { transition:none; z-index:2; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18); border-bottom-color:transparent; }
+  .order .srow.dragging .grip { cursor:grabbing; color:var(--text); }
   .mini-btn { flex:none; width:36px; height:36px; display:grid; place-items:center; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer; padding:0; }
   .mini-btn svg { width:18px; height:18px; }
   .mini-btn:disabled { opacity:.3; cursor:default; }
@@ -267,7 +274,7 @@
 <div id="stats" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <div id="sheet" class="sheet" hidden><div class="panel"></div></div>
-<script src="icons.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="icons.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>
