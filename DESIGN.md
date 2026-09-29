@@ -15,7 +15,9 @@
 - **⚙ Settings** (replaced the palette button): Colors, reorder active habits (drag the ⠿ grip or use up/down arrows), paused habits (Resume), finished habits (Restore / Delete), Backup (Export / Import with "last backup" date). A dashed "Back up your habits" nudge appears on the home screen after 14 days without an export. The app also asks the browser for persistent storage.
 - **📊 Stats button at the bottom** (replaced the search bar) opens a full stats screen:
   - **Swipe a carousel** at the top to pick what you're looking at: first slide is **All habits** (a row of mini rings; with more than 5 it slowly drifts and fades at the edges), then one slide per habit with a big ring. Dots show the position.
-  - **Range** is a small dropdown top-right: Week / Month / Year / All time (last 7 / 30 / 365 days, or since the first habit).
+  - **Range** is a small dropdown top-right: Day / Week / Month / Year / All time. These are **calendar periods** (weeks start Monday), shown as "‹ September 2026 ›"; the arrows step back through earlier periods (not before the first habit, not into the future).
+  - **Month** adds a calendar: for one habit, filled = done, outlined = missed, faded = rest day / paused / not needed; for All habits, each day is shaded by how much got done.
+  - **Day** is a diary: every habit's state that day (Done · 7:42 AM / Missed / Rest day / Paused / Not yet) and "2 of 3 done", counting everything due that day (today included).
   - **Completion rate** = check-offs done ÷ check-offs possible. 2 habits × 10 days = 20 possible; missing 2 = 18 of 20 = 90%. A habit only counts from the day it was created (or its earliest backfilled day). **Today only counts once it's done**, so the rate doesn't drop every morning.
   - Plain big numbers, no boxes. All habits: completion %, check-offs (done/possible), best streak (and which habit). One habit: completion %, days done, all-time total, current streak, longest streak.
   - **Trend line** (stock-chart style, area underneath): each point is the 7-day rolling rate (the week view shows each day). Drag a finger across it to read any day.

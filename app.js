@@ -228,6 +228,7 @@ function toggle(h, date) {
 // h.schedule: missing/{ type: 'daily' } | { type: 'days', days: [0-6, Monday = 0] } | { type: 'weekly', times: N }
 // h.pauses: [{ from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' | null }]; to null = paused right now. Paused days never count as missed.
 // h.archived: 'YYYY-MM-DD' when finished; hidden everywhere but Settings, history kept.
+const fmtDay = (d, opts) => new Date(d * 864e5).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
 const dayNum = key => { const [y, m, d] = key.split('-').map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
 const keyOf = n => new Date(n * 864e5).toISOString().slice(0, 10);
 const todayNum = () => dayNum(ymd(daysAgo(0)));
@@ -661,22 +662,44 @@ function openEditSheet(h) {
 // A day counts toward a habit from the day it was created (or its earliest logged day, if backfilled).
 // Today only counts once it's done, so the rate doesn't drop every morning.
 const longestStreak = h => streaks(h).best;
-const RANGES = [['week', 'Week', 7, 'last 7 days'], ['month', 'Month', 30, 'last 30 days'], ['year', 'Year', 365, 'last 12 months'], ['all', 'All time', 0, 'all time']];
-const statsView = { habit: 'all', range: 'month' };
+const RANGES = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
+// offset = how many periods back from the current one (0 = today / this week / this month / this year).
+const statsView = { habit: 'all', range: 'month', offset: 0 };
+
+// The calendar period `offset` steps back: { from, to (may be past today), label, sub }. Weeks start on Monday.
+function period(range, offset, earliest) {
+  const t = todayNum(), md = { month: 'short', day: 'numeric' };
+  if (range === 'day') {
+    const d = t - offset;
+    return { from: d, to: d, label: offset === 0 ? 'Today' : offset === 1 ? 'Yesterday' : fmtDay(d, { weekday: 'long' }),
+      sub: fmtDay(d, { month: 'long', day: 'numeric', year: 'numeric' }) };
+  }
+  if (range === 'week') {
+    const f = weekStart(t) - 7 * offset;
+    return { from: f, to: f + 6, label: offset === 0 ? 'This week' : offset === 1 ? 'Last week' : `Week of ${fmtDay(f, md)}`,
+      sub: `${fmtDay(f, md)} – ${fmtDay(f + 6, md)}` };
+  }
+  const now = new Date(t * 864e5), y = now.getUTCFullYear();
+  if (range === 'month') {
+    const f = Date.UTC(y, now.getUTCMonth() - offset, 1) / 864e5, l = Date.UTC(y, now.getUTCMonth() - offset + 1, 0) / 864e5;
+    return { from: f, to: l, label: fmtDay(f, { month: 'long' }), sub: fmtDay(f, { year: 'numeric' }) };
+  }
+  if (range === 'year') return { from: Date.UTC(y - offset, 0, 1) / 864e5, to: Date.UTC(y - offset, 11, 31) / 864e5, label: String(y - offset), sub: '' };
+  return { from: earliest, to: t, label: 'All time', sub: `Since ${fmtDay(earliest, { month: 'short', day: 'numeric', year: 'numeric' })}` };
+}
 
 // Per day, how many check-offs were expected ("possible") and made ("done") across the habits.
 // Rest days and paused days expect nothing. A weekly habit expects target/7 a day and only its first
 // `target` check-offs in a week count, so bonus sessions can't push the rate past 100%.
-function computeStats(habits, range) {
+function computeStats(habits, fromDay, toDay) {
   const today = todayNum();
   const earliest = Math.min(...habits.map(startOf));
-  const len = RANGES.find(r => r[0] === range)[2];
-  const from = len ? Math.max(today - len + 1, earliest) : earliest;
+  const from = Math.max(fromDay, earliest), to = Math.min(toDay, today);
   const days = [];
   let done = 0, possible = 0;
   const weekday = Array.from({ length: 7 }, () => ({ done: 0, possible: 0 }));
   const info = habits.map(h => ({ h, start: startOf(h), set: new Set(h.done.map(dayNum)), weekly: sched(h).type === 'weekly', used: new Map() }));
-  for (let d = from; d <= today; d++) {
+  for (let d = from; d <= to; d++) {
     let dd = 0, dp = 0;
     for (const x of info) {
       const { h, start, set } = x;
@@ -702,25 +725,26 @@ function computeStats(habits, range) {
     done += dd; possible += dp;
     days.push({ d, key: keyOf(d), done: dd, possible: dp });
   }
-  return { days, done, possible, weekday, from, today };
+  return { days, done, possible, weekday, from, to, today };
 }
 
 // Weekly habits make 'possible' fractional, and doing a week's sessions early can briefly beat it: cap at 100%.
 const pct = (a, b) => b ? Math.min(100, Math.round(a / b * 100)) : 0;
 const rnd = n => Math.round(n);
-const fmtDay = (d, opts) => new Date(d * 864e5).toLocaleDateString(undefined, { ...opts, timeZone: 'UTC' });
 
 // Trend points: the week shows each day's rate; longer ranges use a 7-day rolling rate so the line
 // moves like a stock chart instead of jumping between 0% and 100%.
-function trendPoints(st, range) {
+// `ext` is computed from 6 days before the period, so each point of the period has a full 7-day window.
+function trendPoints(ext, range, from) {
   const win = range === 'week' ? 1 : 7;
-  return st.days.map((x, i) => {
+  return ext.days.map((x, i) => {
+    if (x.d < from) return null;
     let dn = 0, ps = 0;
-    for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += st.days[j].done; ps += st.days[j].possible; }
+    for (let j = Math.max(0, i - win + 1); j <= i; j++) { dn += ext.days[j].done; ps += ext.days[j].possible; }
     const date = fmtDay(x.d, { weekday: 'short', month: 'short', day: 'numeric', year: range === 'all' || range === 'year' ? 'numeric' : undefined });
     return { v: ps ? Math.min(100, dn / ps * 100) : null,
       tip: ps ? `${date}: ${pct(dn, ps)}%${win > 1 ? ' (last 7 days)' : ` (${rnd(dn)} of ${rnd(ps)})`}` : `${date}: nothing to do yet` };
-  });
+  }).filter(Boolean);
 }
 
 function lineChart(points, xLabels, yLabels = ['100%', '50%', '0%']) {
@@ -775,11 +799,11 @@ function bindLineChart(root, points) {
 
 // Check-offs per hour across the selected habits and range, smoothed over 3 hours (wrapping at midnight).
 const hourName = h => `${h % 12 || 12} ${h % 24 < 12 ? 'AM' : 'PM'}`;
-function timeOfDay(habits, from) {
+function timeOfDay(habits, from, to) {
   const counts = Array(24).fill(0);
   let total = 0;
   for (const h of habits) for (const [key, min] of Object.entries(h.times || {})) {
-    if (dayNum(key) < from || !h.done.includes(key)) continue;
+    if (dayNum(key) < from || dayNum(key) > to || !h.done.includes(key)) continue;
     counts[Math.floor(min / 60) % 24]++; total++;
   }
   const smooth = counts.map((_, i) => (counts[(i + 23) % 24] + 2 * counts[i] + counts[(i + 1) % 24]) / 4);
@@ -856,19 +880,84 @@ function openStats() {
     if (id && id !== statsView.habit) { statsView.habit = id; drawBody(); }
   }, { passive: true });
 
-  $('range').onchange = e => { statsView.range = e.target.value; drawBody(); };
+  $('range').onchange = e => { statsView.range = e.target.value; statsView.offset = 0; drawBody(); };
   $('stats-close').onclick = closeStats;
   drawBody();
+}
+
+const clockTime = min => new Date(2000, 0, 1, Math.floor(min / 60), min % 60).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+// Month grid: a single habit shows done / missed / rest days; "All habits" shades each day by how much got done.
+function monthCalendar(p, habits, one, st) {
+  const today = todayNum(), byDay = new Map(st.days.map(x => [x.d, x]));
+  const cells = [];
+  for (let i = 0; i < weekdayOf(p.from); i++) cells.push('<span class="cd blank"></span>');
+  for (let d = p.from; d <= p.to; d++) {
+    const n = new Date(d * 864e5).getUTCDate();
+    let cls = 'none', style = '', tip = fmtDay(d, { weekday: 'short', month: 'short', day: 'numeric' });
+    if (d > today) cls = 'future';
+    else if (one) {
+      const hit = one.done.includes(keyOf(d));
+      if (d < startOf(one)) cls = 'none';
+      else if (hit) { cls = 'done'; tip += ': done'; }
+      else if (isPausedOn(one, d)) { cls = 'rest'; tip += ': paused'; }
+      else if (sched(one).type === 'weekly' || !isDueOn(one, d)) { cls = 'rest'; tip += ': not needed'; }
+      else if (d === today) { cls = 'open'; tip += ': not yet'; }
+      else { cls = 'miss'; tip += ': missed'; }
+    } else {
+      const x = byDay.get(d);
+      if (x && x.possible) {
+        const a = Math.min(1, x.done / x.possible);
+        cls = a ? 'heat' : 'miss'; style = ` style="--a:${(.15 + .85 * a).toFixed(2)}"`;
+        tip += `: ${pct(x.done, x.possible)}% (${rnd(x.done)} of ${rnd(x.possible)})`;
+      }
+    }
+    cells.push(`<span class="cd ${cls}${d === today ? ' today' : ''}"${style} title="${esc(tip)}">${n}</span>`);
+  }
+  return `<div class="cal">${DAY_LETTERS.map(l => `<span class="cw">${l}</span>`).join('')}${cells.join('')}</div>
+    <p class="cal-key">${one ? '<i class="k done"></i>Done <i class="k miss"></i>Missed <i class="k rest"></i>Rest / not needed' : '<i class="k heat"></i>More done <i class="k miss"></i>Nothing done'}</p>`;
+}
+
+// Day view: each habit's state on that day, with the time it was checked off when known.
+function dayList(d, habits) {
+  const today = todayNum(), key = keyOf(d);
+  const rows = habits.filter(h => d >= startOf(h)).map(h => {
+    const hit = h.done.includes(key), t = h.times && h.times[key];
+    const status = hit ? `Done${t != null ? ' · ' + clockTime(t) : ''}`
+      : isPausedOn(h, d) ? 'Paused'
+      : sched(h).type === 'weekly' ? `Not done · ${weekCount(h, d)}/${sched(h).times} that week`
+      : !isDueOn(h, d) ? 'Rest day'
+      : d === today ? 'Not yet' : 'Missed';
+    return `<div class="drow${hit ? ' hit' : ''}"><span class="sface">${faceHTML(h)}</span><span class="sname">${esc(h.name)}</span><span class="dstat">${status}</span></div>`;
+  });
+  return rows.length ? `<div class="dlist">${rows.join('')}</div>` : '<p class="note">No habits yet on this day.</p>';
 }
 
 function drawBody() {
   const habits = state.habits.filter(h => !h.archived);
   const one = habits.find(h => h.id === statsView.habit);
-  const st = computeStats(one ? [one] : habits, statsView.range);
-  const range = RANGES.find(r => r[0] === statsView.range);
+  const sel = one ? [one] : habits;
+  const earliest = Math.min(...sel.map(startOf)), today = todayNum();
+  const range = statsView.range;
+  const p = period(range, statsView.offset, earliest);
+  const st = computeStats(sel, p.from, p.to);
+  const canBack = range !== 'all' && p.from > earliest, canFwd = range !== 'all' && statsView.offset > 0;
+
+  const nav = `<div class="pnav">
+      <button class="round pbtn" id="p-prev" aria-label="Previous"${canBack ? '' : ' disabled'}>‹</button>
+      <div class="ptitle"><b>${esc(p.label)}</b>${p.sub ? `<small>${esc(p.sub)}</small>` : ''}</div>
+      <button class="round pbtn" id="p-next" aria-label="Next"${canFwd ? '' : ' disabled'}>›</button>
+    </div>`;
 
   const wk = h => sched(h).type === 'weekly' ? '<small> wk</small>' : '';
-  const nums = one ? [
+  // A single day counts everything that was due that day, today included ("0 of 3 done" beats "0 of 0").
+  const dayDue = range === 'day' ? sel.filter(h => p.from >= startOf(h) && !isPausedOn(h, p.from)
+    && (h.done.includes(keyOf(p.from)) || (sched(h).type !== 'weekly' && isDueOn(h, p.from)))) : [];
+  const dayDone = dayDue.filter(h => h.done.includes(keyOf(p.from))).length;
+  const nums = range === 'day' ? [
+    [`${pct(dayDone, dayDue.length)}%`, 'completion'],
+    [`${dayDone}<small>/${dayDue.length}</small>`, 'done'],
+  ] : one ? [
     [`${pct(st.done, st.possible)}%`, 'completion'],
     [`${rnd(st.done)}<small>/${rnd(st.possible)}</small>`, sched(one).type === 'weekly' ? 'check-offs' : 'days done'],
     [one.done.length, 'all-time total'],
@@ -882,10 +971,20 @@ function drawBody() {
       [`${best[0]}${best[0] ? wk(best[1]) : ''}`, `best streak${best[0] ? `<span class="who">${best[1].icon ? `<span class="wi">${iconSvg(best[1].icon)}</span>` : best[1].emoji ? esc(best[1].emoji) + ' ' : ''}${esc(best[1].name)}</span>` : ''}`],
     ];
   })();
+  const numsHTML = `<div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>`;
 
-  const pts = trendPoints(st, statsView.range);
-  const yr = statsView.range === 'all' || statsView.range === 'year' ? { year: 'numeric' } : {};
-  const first = fmtDay(st.from, { month: 'short', day: 'numeric', ...yr }), last = 'Today';
+  const body = $('stats-body');
+  if (range === 'day') {
+    body.innerHTML = `${nav}${numsHTML}<hr class="sep"><h3>${one ? 'That day' : 'Your habits that day'}</h3>${dayList(p.from, sel)}`;
+    bindNav();
+    return;
+  }
+
+  const ext = computeStats(sel, p.from - 6, p.to);
+  const pts = trendPoints(ext, range, st.from);
+  const yr = range === 'all' || range === 'year' ? { year: 'numeric' } : {};
+  const first = fmtDay(st.from, { month: 'short', day: 'numeric', ...yr });
+  const last = st.to === today ? 'Today' : fmtDay(st.to, { month: 'short', day: 'numeric', ...yr });
 
   const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const wd = st.weekday.map((w, i) => ({ ...w, short: names[i][0], long: names[i] }));
@@ -894,24 +993,25 @@ function drawBody() {
     ? `Best on <b>${ranked[0].long}s</b> (${pct(ranked[0].done, ranked[0].possible)}%), weakest on <b>${ranked[ranked.length - 1].long}s</b> (${pct(ranked[ranked.length - 1].done, ranked[ranked.length - 1].possible)}%).`
     : 'Keep going to see which days work best.';
 
-  const tod = timeOfDay(one ? [one] : habits, st.from);
+  const tod = timeOfDay(sel, st.from, st.to);
   const todNote = tod.total
     ? `Usually around <b>${hourName(tod.peak)}</b> · ${tod.total} timed check-off${tod.total === 1 ? '' : 's'}.`
     : 'Times are saved from now on when you tap a circle, so this fills in as you go.';
 
-  const body = $('stats-body');
   body.innerHTML = `
-    <p class="range-note">${range[3][0].toUpperCase() + range[3].slice(1)}</p>
-    <div class="nums">${nums.map(([v, k]) => `<div class="num"><div class="nv">${v}</div><div class="nk">${k}</div></div>`).join('')}</div>
+    ${nav}
+    ${numsHTML}
+    ${range === 'month' ? `<hr class="sep"><h3>Calendar</h3>${monthCalendar(p, habits, one, st)}` : ''}
     <hr class="sep">
-    <h3>${statsView.range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
-    ${lineChart(pts, [first, last])}
+    <h3>${range === 'week' ? 'Each day' : 'Trend · 7-day average'}</h3>
+    ${pts.length ? lineChart(pts, [first, last]) : '<p class="note">Nothing to show for this period yet.</p>'}
     <hr class="sep">
     <div class="duo">
       <div><h3>Day of the week</h3>${barChart(wd)}<p class="note">${wdNote}</p></div>
       <div id="tod"><h3>Time of day</h3>${lineChart(tod.points, ['12a', '6a', '12p', '6p', '12a'], ['', '', ''])}<p class="note">${todNote}</p></div>
     </div>`;
-  bindLineChart(body.querySelector('.lchart'), pts);
+  bindNav();
+  if (pts.length) bindLineChart(body.querySelector('.lchart'), pts);
   bindLineChart($('tod').querySelector('.lchart'), tod.points);
   $('tod').querySelector('.readout').textContent = tod.total ? tod.points[tod.peak].tip : 'No times yet';
   const bc = body.querySelector('.bchart'), out = bc.querySelector('.readout');
@@ -920,6 +1020,10 @@ function drawBody() {
     bar.onclick = show;
     bar.onpointerenter = e => { if (e.pointerType === 'mouse') show(); };
   });
+}
+function bindNav() {
+  $('p-prev').onclick = () => { statsView.offset++; drawBody(); };
+  $('p-next').onclick = () => { statsView.offset = Math.max(0, statsView.offset - 1); drawBody(); };
 }
 function closeStats() { hideAnimated($('stats')); }
 $('stats-btn').onclick = openStats;
@@ -1024,7 +1128,7 @@ function openSettings() {
       <p class="sub">Your habits are saved only on this phone. Export a backup file now and then (save it to Files or iCloud) so you never lose them. ${backupText()}</p>
       <div class="actions"><button class="ghost" id="import">${iconSvg('ui-upload-simple')}Import</button><button class="primary" id="export">${iconSvg('ui-download-simple')}Export</button></div>
       <div class="actions done-row"><button class="ghost" id="close">Done</button></div>
-      <div class="links">Version 24</div>
+      <div class="links">Version 25</div>
     `, panel => {
       panel.scrollTop = keep;
       const byId = id => state.habits.find(h => h.id === id);
